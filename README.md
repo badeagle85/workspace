@@ -8,7 +8,7 @@
 |---------|------|----------|------|
 | **card** | 디지털 카드 생성/공유 서비스 | - | Next.js, Supabase |
 | **chaos** | WC3 Chaos 게임 팀 밸런서 | [wc3-chaos.vercel.app](https://wc3-chaos.vercel.app) | Next.js, Supabase |
-| **delivery-note** | 배송장 OCR 인식 서비스 | - | Next.js, Tesseract.js |
+| **delivery-note** | 배송장 OCR 인식 서비스 | [delivery-note-ebon.vercel.app](https://delivery-note-ebon.vercel.app) | Next.js, Tesseract.js |
 | **image-server** | 이미지 업로드/저장 API | [image-server.badeagle85.workers.dev](https://image-server.badeagle85.workers.dev) | Cloudflare Workers, R2 |
 
 ## 기술 스택
