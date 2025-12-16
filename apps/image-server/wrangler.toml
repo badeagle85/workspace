@@ -1,0 +1,11 @@
+name = "image-server"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "badeagle85-image"
+
+[vars]
+ENVIRONMENT = "production"
+MAX_FILE_SIZE = "1048576"
