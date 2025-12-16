@@ -74,7 +74,7 @@ export default function GoogleUploadPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -399,101 +399,103 @@ function OcrResultCard({
 
   return (
     <>
-      {imageUrl && (
+      {/* 좌우 레이아웃: 원본 이미지 | 추출 결과 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 왼쪽: 원본 이미지 */}
+        {imageUrl && (
+          <Card className="h-fit lg:sticky lg:top-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">원본 이미지</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg overflow-hidden">
+                <img src={imageUrl} alt="거래명세서" className="w-full object-contain max-h-[70vh]" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 오른쪽: 추출 결과 */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">원본 이미지</CardTitle>
+          <CardHeader>
+            <CardTitle className="text-base">추출 결과 편집</CardTitle>
             <CardDescription>
-              이미지를 참고하여 결과를 확인하세요
+              신뢰도: {ocrResult.confidence.toFixed(1)}%
+              {emptyQuantityCount > 0 && (
+                <span className="text-orange-500 ml-2">
+                  (수량 미입력: {emptyQuantityCount}개)
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg overflow-hidden max-h-80">
-              <img src={imageUrl} alt="거래명세서" className="w-full object-contain" />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">날짜</p>
+                <p className="font-medium">{parsedData.date || "-"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">거래처</p>
+                <p className="font-medium">{parsedData.supplier || "-"}</p>
+              </div>
             </div>
+
+            <div>
+              <p className="text-sm font-medium mb-2">
+                품목 목록 ({editableItems.length}개)
+              </p>
+
+              <div className="space-y-2">
+                {editableItems.map((item, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <span className="w-6 text-xs text-muted-foreground text-center">
+                      {index + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => updateItem(index, "name", e.target.value)}
+                      placeholder="품명"
+                      className="flex-1 px-3 py-2 border rounded-md text-sm"
+                    />
+                    <input
+                      type="number"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                      placeholder="수량"
+                      className={`w-20 px-2 py-2 border rounded-md text-sm text-right ${
+                        item.name && !item.quantity ? "border-orange-300 bg-orange-50" : ""
+                      }`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeItem(index)}
+                      disabled={editableItems.length === 1}
+                      className="text-muted-foreground hover:text-destructive h-8 w-8"
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <Button variant="outline" onClick={addItem} className="w-full mt-3">
+                + 품목 추가
+              </Button>
+            </div>
+
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                OCR 원본 텍스트 보기
+              </summary>
+              <div className="mt-2 p-3 bg-muted rounded-lg">
+                <pre className="text-xs whitespace-pre-wrap">{ocrResult.text || "(텍스트 없음)"}</pre>
+              </div>
+            </details>
           </CardContent>
         </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">추출 결과 편집</CardTitle>
-          <CardDescription>
-            신뢰도: {ocrResult.confidence.toFixed(1)}%
-            {emptyQuantityCount > 0 && (
-              <span className="text-orange-500 ml-2">
-                (수량 미입력: {emptyQuantityCount}개)
-              </span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">날짜</p>
-              <p className="font-medium">{parsedData.date || "-"}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">거래처</p>
-              <p className="font-medium">{parsedData.supplier || "-"}</p>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-sm font-medium mb-2">
-              품목 목록 ({editableItems.length}개)
-            </p>
-
-            <div className="space-y-2">
-              {editableItems.map((item, index) => (
-                <div key={index} className="flex gap-2 items-center">
-                  <span className="w-8 text-sm text-muted-foreground text-center">
-                    {index + 1}
-                  </span>
-                  <input
-                    type="text"
-                    value={item.name}
-                    onChange={(e) => updateItem(index, "name", e.target.value)}
-                    placeholder="품명"
-                    className="flex-1 px-3 py-2 border rounded-md text-sm"
-                  />
-                  <input
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                    placeholder="수량"
-                    className={`w-24 px-3 py-2 border rounded-md text-sm text-right ${
-                      item.name && !item.quantity ? "border-orange-300 bg-orange-50" : ""
-                    }`}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeItem(index)}
-                    disabled={editableItems.length === 1}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    ✕
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            <Button variant="outline" onClick={addItem} className="w-full mt-3">
-              + 품목 추가
-            </Button>
-          </div>
-
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-              OCR 원본 텍스트 보기
-            </summary>
-            <div className="mt-2 p-3 bg-muted rounded-lg">
-              <pre className="text-xs whitespace-pre-wrap">{ocrResult.text || "(텍스트 없음)"}</pre>
-            </div>
-          </details>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* 저장 결과 메시지 */}
       {saveError && (
