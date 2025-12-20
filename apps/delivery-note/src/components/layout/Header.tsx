@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Upload, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Menu, UserPlus, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -45,12 +45,14 @@ export function Header() {
         {/* Right side actions */}
         <div className="flex-1" />
         <div className="flex items-center gap-2">
-          <Link href="/upload">
-            <Button size="sm" className="hidden sm:flex">
-              <Upload className="h-4 w-4 mr-2" />
-              새 업로드
-            </Button>
-          </Link>
+          <Button
+            size="sm"
+            className="hidden sm:flex"
+            onClick={() => alert("준비중")}
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            회원가입
+          </Button>
         </div>
       </div>
     </header>
