@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Upload, History, Settings, Layers, LayoutTemplate } from "lucide-react";
+import { Menu, Upload, History, Settings, Layers, LayoutTemplate, PanelLeftClose, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useUiStore } from "@/stores/uiStore";
@@ -17,7 +17,7 @@ const navigation = [
 
 export function Header() {
   const pathname = usePathname();
-  const { toggleSidebar } = useUiStore();
+  const { toggleSidebar, toggleSidebarCollapsed, sidebarCollapsed } = useUiStore();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -31,6 +31,21 @@ export function Header() {
         >
           <Menu className="h-5 w-5" />
           <span className="sr-only">메뉴 열기</span>
+        </Button>
+
+        {/* Desktop sidebar toggle button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex"
+          onClick={toggleSidebarCollapsed}
+        >
+          {sidebarCollapsed ? (
+            <PanelLeft className="h-5 w-5" />
+          ) : (
+            <PanelLeftClose className="h-5 w-5" />
+          )}
+          <span className="sr-only">사이드바 토글</span>
         </Button>
 
         {/* Logo */}

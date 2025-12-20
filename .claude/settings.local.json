@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "figma",
+    "gdrive"
+  ],
+  "enableAllProjectMcpServers": true
+}

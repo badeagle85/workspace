@@ -58,43 +58,42 @@ export interface StandardProduct {
   id: string;
   name: string;
   category?: string;
-  subCategory?: string;
   unit: string;
-  specifications?: ProductSpecifications;
-  keywords: string[];
+  sortOrder: number;
   isActive: boolean;
-}
-
-export interface ProductSpecifications {
-  type?: string;
-  poles?: string;
-  frame?: string;
-  size?: string;
-  rating?: string;
-  [key: string]: string | undefined;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ProductMapping {
   id: string;
+  supplierId: string;
+  supplier?: Supplier;
   standardProductId: string;
   standardProduct?: StandardProduct;
   originalName: string;
-  manufacturer?: string;
-  pattern?: string;
-  confidence: number;
-  matchCount: number;
-  isActive: boolean;
-  createdAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Supplier Types
 export interface Supplier {
   id: string;
   name: string;
-  code?: string;
-  contact?: string;
-  address?: string;
   memo?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Store Types (지점)
+export interface Store {
+  id: string;
+  name: string;
+  memo?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // OCR Types

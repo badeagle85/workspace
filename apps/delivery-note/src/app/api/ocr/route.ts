@@ -34,6 +34,16 @@ interface GoogleVisionResponse {
   }>;
 }
 
+export interface TextAnnotation {
+  text: string;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
 export interface OcrApiResponse {
   success: boolean;
   data?: {
@@ -43,6 +53,7 @@ export interface OcrApiResponse {
       text: string;
       confidence: number;
     }>;
+    annotations?: TextAnnotation[];
   };
   error?: string;
 }
@@ -159,12 +170,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<OcrApiRes
       }
     }
 
+    // textAnnotations에서 좌표 정보 추출 (첫 번째는 전체 텍스트이므로 제외)
+    const textAnnotations = response.textAnnotations ?? [];
+    const annotations: TextAnnotation[] = [];
+
+    for (let i = 1; i < textAnnotations.length; i++) {
+      const annotation = textAnnotations[i];
+      const vertices = annotation.boundingPoly.vertices;
+
+      // bounding box 계산
+      const xs = vertices.map(v => v.x ?? 0);
+      const ys = vertices.map(v => v.y ?? 0);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+
+      annotations.push({
+        text: annotation.description,
+        bounds: {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+        },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         text: fullText,
         confidence: avgConfidence,
         lines,
+        annotations,
       },
     });
   } catch (error) {

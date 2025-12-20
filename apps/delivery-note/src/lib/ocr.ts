@@ -1,5 +1,5 @@
 import Tesseract from "tesseract.js";
-import type { OcrApiResponse } from "@/app/api/ocr/route";
+import type { OcrApiResponse, TextAnnotation } from "@/app/api/ocr/route";
 import type { OcrProvider } from "@/stores/settingsStore";
 import { supabase } from "@/lib/supabase";
 
@@ -10,6 +10,7 @@ export interface OcrResult {
     text: string;
     confidence: number;
   }>;
+  annotations?: TextAnnotation[];
 }
 
 /**
@@ -66,7 +67,10 @@ async function extractWithGoogleVision(
 
   onProgress?.(100);
 
-  return result.data;
+  return {
+    ...result.data,
+    annotations: result.data.annotations,
+  };
 }
 
 /**
@@ -120,7 +124,8 @@ function fileToDataUrl(file: File): Promise<string> {
  * OCR 결과에서 거래명세서 데이터를 파싱합니다
  */
 export interface ParsedInvoice {
-  supplier?: string;
+  supplier?: string;      // 공급자 상호 (공급업체)
+  storeName?: string;     // 공급받는자 상호 (지점)
   date?: string;
   documentNumber?: string;
   items: ParsedItem[];
@@ -135,6 +140,8 @@ export interface ParsedItem {
   unitPrice: number;
   amount: number;
   raw: string; // 원본 라인
+  originalQuantityText?: string; // OCR 원본 수량 텍스트 (보정 전)
+  wasQuantityCorrected?: boolean; // 수량이 자동 보정되었는지 여부
 }
 
 /**
@@ -168,11 +175,46 @@ export function parseInvoiceText(ocrResult: OcrResult | null): ParsedInvoice {
     date = `${dateMatch2[1]}-${dateMatch2[2].padStart(2, '0')}-${dateMatch2[3].padStart(2, '0')}`;
   }
 
-  // 공급자 상호 추출
+  // 공급받는자 상호 추출 (지점) - 보통 왼쪽에 있음
+  // 공급자 상호 추출 (공급업체) - 보통 오른쪽에 있음
   let supplier: string | undefined;
-  const supplierMatch = text.match(/상\s*호[:\s]*([^\n]+)/);
-  if (supplierMatch) {
-    supplier = supplierMatch[1].trim().split(/\s{2,}/)[0];
+  let storeName: string | undefined;
+
+  // 전체 텍스트에서 공급받는자/공급자 섹션 찾기
+  // 패턴: "공급받는자" ... "상호" ... "공급자" ... "상호"
+  const receiverSection = text.match(/공\s*급\s*받\s*는\s*자[\s\S]*?상\s*호[:\s]*([^\n공]+)/);
+  const supplierSection = text.match(/공\s*급\s*자[\s\S]*?상\s*호[:\s]*([^\n]+)/);
+
+  if (receiverSection) {
+    // 공급받는자 상호 (지점)
+    storeName = receiverSection[1].trim()
+      .replace(/등록번호[\s\S]*/g, "") // 등록번호 이후 제거
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    console.log("공급받는자 상호 (지점):", storeName);
+  }
+
+  if (supplierSection) {
+    // 공급자 상호 (공급업체)
+    supplier = supplierSection[1].trim()
+      .replace(/\(인\)/g, "") // (인) 제거
+      .replace(/등록번호[\s\S]*/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    console.log("공급자 상호 (공급업체):", supplier);
+  }
+
+  // 위 패턴으로 못 찾은 경우 대체 패턴
+  if (!supplier && !storeName) {
+    // 모든 상호 찾기 (보통 2개: 공급받는자, 공급자)
+    const allCompanyNames = text.matchAll(/상\s*호[:\s]*([^\n등]+)/g);
+    const names = Array.from(allCompanyNames).map(m => m[1].trim().replace(/\s{2,}/g, " "));
+    if (names.length >= 2) {
+      storeName = names[0]; // 첫 번째: 공급받는자 (지점)
+      supplier = names[1].replace(/\(인\)/g, "").trim(); // 두 번째: 공급자 (공급업체)
+    } else if (names.length === 1) {
+      supplier = names[0];
+    }
   }
 
   // 등록번호 추출
@@ -182,12 +224,16 @@ export function parseInvoiceText(ocrResult: OcrResult | null): ParsedInvoice {
     documentNumber = regNumMatch[1];
   }
 
-  // 품명과 수량을 별도로 추출 후 매칭
-  const items = extractItemsFromLines(lines);
+  // 품명과 수량 추출 (좌표 정보가 있으면 좌표 기반 매칭 사용)
+  const annotations = ocrResult.annotations;
+  const items = annotations && annotations.length > 0
+    ? extractItemsWithCoordinates(annotations)
+    : extractItemsFromLines(lines);
 
   const result: ParsedInvoice = {
     date,
     supplier,
+    storeName,
     documentNumber,
     items,
     totalAmount: undefined,
@@ -210,6 +256,399 @@ const KNOWN_ITEM_NAMES = [
   "가운", "패드", "이불", "방수커버", "걸레",
   "타올", "시트", "커버"
 ];
+
+/**
+ * 좌표 기반으로 품명과 수량을 매칭
+ * Google Vision API의 textAnnotations 좌표 정보 활용
+ * "품명" 헤더 아래에 있는 항목만 추출
+ */
+function extractItemsWithCoordinates(annotations: TextAnnotation[]): ParsedItem[] {
+  const items: ParsedItem[] = [];
+
+  // 1. "품명" 헤더 위치 찾기
+  let itemHeaderY = 0;
+  let itemHeaderX = 0;
+  let quantityHeaderX = 0;
+
+  for (const ann of annotations) {
+    if (ann.text === "품명") {
+      itemHeaderY = ann.bounds.y + ann.bounds.height;
+      itemHeaderX = ann.bounds.x;
+    }
+    if (ann.text === "납품" || ann.text === "수량") {
+      if (quantityHeaderX === 0) {
+        quantityHeaderX = ann.bounds.x;
+      }
+    }
+  }
+
+  // 헤더를 찾지 못하면 fallback
+  if (itemHeaderY === 0) {
+    console.log("품명 헤더를 찾지 못했습니다. 기본 파싱 사용.");
+    return extractItemsFallback(annotations);
+  }
+
+  console.log(`품명 헤더 위치: x=${itemHeaderX}, y=${itemHeaderY}`);
+  console.log(`수량 헤더 X 위치: ${quantityHeaderX}`);
+
+  // 2. 품명 열과 수량 열의 X 범위 정의
+  // 품명 열: 헤더 X 기준 좌우 300px
+  const itemColMinX = itemHeaderX - 200;
+  const itemColMaxX = itemHeaderX + 400;
+  // 수량 열: 수량 헤더 X 기준 좌우 200px
+  const qtyColMinX = quantityHeaderX - 100;
+  const qtyColMaxX = quantityHeaderX + 300;
+
+  // 3. 헤더 아래의 텍스트만 필터링
+  interface AnnotatedText {
+    text: string;
+    y: number;
+    x: number;
+    height: number;
+    width: number;
+  }
+
+  interface QuantityText extends AnnotatedText {
+    originalText: string; // OCR 원본 텍스트
+    wasCorrected: boolean; // 보정 여부
+  }
+
+  const itemTexts: AnnotatedText[] = [];
+  const quantityTexts: QuantityText[] = [];
+
+  for (const ann of annotations) {
+    const centerY = ann.bounds.y + ann.bounds.height / 2;
+    const centerX = ann.bounds.x + ann.bounds.width / 2;
+
+    // 헤더 아래에 있는 것만
+    if (ann.bounds.y < itemHeaderY) continue;
+
+    // 품명 열에 있는 텍스트
+    if (centerX >= itemColMinX && centerX <= itemColMaxX) {
+      // 제외할 키워드
+      const excluded = ["비", "고", "비고", "특이사항", "담당자", "검수", "입회", "수거", "납품"];
+      if (!excluded.includes(ann.text)) {
+        itemTexts.push({
+          text: ann.text,
+          y: centerY,
+          x: ann.bounds.x,
+          height: ann.bounds.height,
+          width: ann.bounds.width,
+        });
+      }
+    }
+
+    // 수량 열에 있는 숫자 (OCR 오류 보정 포함)
+    if (centerX >= qtyColMinX && centerX <= qtyColMaxX) {
+      const originalText = ann.text;
+
+      // OCR 일반적인 오류 보정
+      let correctedText = originalText;
+      correctedText = correctedText.replace(/[bB]/g, "6"); // b/B → 6
+      correctedText = correctedText.replace(/[oO]/g, "0"); // o/O → 0
+      correctedText = correctedText.replace(/[lI]/g, "1"); // l/I → 1
+      correctedText = correctedText.replace(/[sS]/g, "5"); // s/S → 5
+      correctedText = correctedText.replace(/[zZ]/g, "2"); // z/Z → 2
+      correctedText = correctedText.replace(/[gq]/g, "9"); // g/q → 9
+
+      const wasCorrected = correctedText !== originalText;
+
+      if (/^\d+$/.test(correctedText)) {
+        const num = parseInt(correctedText, 10);
+        if (num > 0 && num < 10000) {
+          quantityTexts.push({
+            text: correctedText, // 보정된 숫자 사용
+            originalText, // 원본 텍스트 저장
+            wasCorrected, // 보정 여부
+            y: centerY,
+            x: ann.bounds.x,
+            height: ann.bounds.height,
+            width: ann.bounds.width,
+          });
+          if (wasCorrected) {
+            console.log(`OCR 보정: "${originalText}" → "${correctedText}"`);
+          }
+        }
+      }
+    }
+  }
+
+  // 4. 같은 행의 텍스트들을 그룹화하여 품명 조합
+  interface ItemRow {
+    texts: AnnotatedText[];
+    minY: number;
+    maxY: number;
+  }
+
+  const rows: ItemRow[] = [];
+
+  // Y 좌표로 정렬
+  itemTexts.sort((a, b) => a.y - b.y);
+
+  for (const txt of itemTexts) {
+    // 기존 행에 추가할 수 있는지 확인
+    let added = false;
+    for (const row of rows) {
+      const rowCenterY = (row.minY + row.maxY) / 2;
+      const tolerance = 40; // Y 좌표 허용 오차
+      if (Math.abs(txt.y - rowCenterY) < tolerance) {
+        row.texts.push(txt);
+        row.minY = Math.min(row.minY, txt.y - txt.height / 2);
+        row.maxY = Math.max(row.maxY, txt.y + txt.height / 2);
+        added = true;
+        break;
+      }
+    }
+
+    if (!added) {
+      rows.push({
+        texts: [txt],
+        minY: txt.y - txt.height / 2,
+        maxY: txt.y + txt.height / 2,
+      });
+    }
+  }
+
+  // 5. 각 행에서 품명 조합 및 수량 매칭
+  console.log("=== 좌표 기반 파싱 (품명 열 기준) ===");
+
+  for (const row of rows) {
+    // X 좌표로 정렬하여 순서대로 조합
+    row.texts.sort((a, b) => a.x - b.x);
+
+    // 토큰들을 조합하면서 "(", "D", ")" 같은 패턴을 "(D)"로 합침
+    const tokens: string[] = [];
+    let i = 0;
+    while (i < row.texts.length) {
+      const current = row.texts[i].text;
+
+      // "(", 단일문자, ")" 패턴 검사
+      if (current === "(" && i + 2 < row.texts.length) {
+        const next = row.texts[i + 1].text;
+        const nextNext = row.texts[i + 2].text;
+        if (/^[A-Z]$/.test(next) && nextNext === ")") {
+          tokens.push(`(${next})`);
+          i += 3;
+          continue;
+        }
+      }
+
+      // 단일 괄호나 단일 문자는 건너뜀 (이미 위에서 처리되거나 불필요한 경우)
+      if (current === "(" || current === ")" || /^[A-Z]$/.test(current)) {
+        i++;
+        continue;
+      }
+
+      tokens.push(current);
+      i++;
+    }
+
+    let itemName = tokens.join(" ");
+
+    // (D), (S) 등의 옵션 정리 (혹시 남아있는 경우)
+    itemName = itemName.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+    itemName = itemName.replace(/\s+/g, " ").trim();
+
+    // 품명 유효성 검사
+    if (!isValidItemName(itemName)) continue;
+
+    // 같은 Y 좌표의 수량 찾기
+    const rowCenterY = (row.minY + row.maxY) / 2;
+    const tolerance = 50;
+
+    const matchingQty = quantityTexts.find(q =>
+      Math.abs(q.y - rowCenterY) < tolerance
+    );
+
+    const quantity = matchingQty ? parseInt(matchingQty.text, 10) : 0;
+
+    // 사용된 수량 제거
+    if (matchingQty) {
+      const idx = quantityTexts.indexOf(matchingQty);
+      quantityTexts.splice(idx, 1);
+    }
+
+    const wasQuantityCorrected = matchingQty?.wasCorrected || false;
+    const originalQuantityText = matchingQty?.originalText;
+
+    console.log(`품명: "${itemName}", 수량: ${quantity}${wasQuantityCorrected ? ` (원본: ${originalQuantityText})` : ""}, Y: ${Math.round(rowCenterY)}`);
+
+    items.push({
+      sequence: items.length + 1,
+      name: itemName,
+      quantity,
+      unit: "EA",
+      unitPrice: 0,
+      amount: 0,
+      raw: `${itemName}: ${quantity}`,
+      originalQuantityText: wasQuantityCorrected ? originalQuantityText : undefined,
+      wasQuantityCorrected,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * 유효한 품명인지 확인
+ */
+function isValidItemName(text: string): boolean {
+  const cleaned = text.replace(/\s*\([A-Z]\)\s*/g, "").replace(/\s+/g, "").trim();
+
+  // 최소 2글자
+  if (cleaned.length < 2) return false;
+
+  // 제외 키워드
+  const excluded = [
+    "품명", "납품", "수량", "비고", "상호", "등록번호", "공급", "사업장", "거래",
+    "담당자", "검수", "입회", "수거", "특이사항", "유한회사", "주식회사"
+  ];
+
+  for (const ex of excluded) {
+    if (cleaned.includes(ex)) return false;
+  }
+
+  // 한글이 포함되어야 함
+  return /[가-힣]/.test(cleaned);
+}
+
+/**
+ * 품명 헤더를 찾지 못했을 때의 fallback
+ */
+function extractItemsFallback(annotations: TextAnnotation[]): ParsedItem[] {
+  const items: ParsedItem[] = [];
+  const itemCandidates: { text: string; y: number; x: number; height: number }[] = [];
+  const quantityCandidates: { text: string; y: number; x: number; height: number }[] = [];
+
+  let currentItemTokens: { text: string; y: number; x: number; height: number }[] = [];
+
+  for (const ann of annotations) {
+    const text = ann.text.trim();
+    const centerY = ann.bounds.y + ann.bounds.height / 2;
+    const x = ann.bounds.x;
+
+    if (/^\d+$/.test(text)) {
+      const num = parseInt(text, 10);
+      if (num > 0 && num < 10000) {
+        quantityCandidates.push({ text, y: centerY, x, height: ann.bounds.height });
+      }
+      if (currentItemTokens.length > 0) {
+        const combinedText = currentItemTokens.map(t => t.text).join(" ");
+        if (isItemNameText(combinedText)) {
+          itemCandidates.push({
+            text: combinedText,
+            y: currentItemTokens[0].y,
+            x: currentItemTokens[0].x,
+            height: currentItemTokens[0].height,
+          });
+        }
+        currentItemTokens = [];
+      }
+      continue;
+    }
+
+    if (/^[가-힣]+$/.test(text)) {
+      const lastToken = currentItemTokens[currentItemTokens.length - 1];
+      if (lastToken && Math.abs(lastToken.y - centerY) < lastToken.height * 0.5) {
+        currentItemTokens.push({ text, y: centerY, x, height: ann.bounds.height });
+      } else {
+        if (currentItemTokens.length > 0) {
+          const combinedText = currentItemTokens.map(t => t.text).join(" ");
+          if (isItemNameText(combinedText)) {
+            itemCandidates.push({
+              text: combinedText,
+              y: currentItemTokens[0].y,
+              x: currentItemTokens[0].x,
+              height: currentItemTokens[0].height,
+            });
+          }
+        }
+        currentItemTokens = [{ text, y: centerY, x, height: ann.bounds.height }];
+      }
+      continue;
+    }
+
+    if (currentItemTokens.length > 0) {
+      const combinedText = currentItemTokens.map(t => t.text).join(" ");
+      if (isItemNameText(combinedText)) {
+        itemCandidates.push({
+          text: combinedText,
+          y: currentItemTokens[0].y,
+          x: currentItemTokens[0].x,
+          height: currentItemTokens[0].height,
+        });
+      }
+      currentItemTokens = [];
+    }
+  }
+
+  if (currentItemTokens.length > 0) {
+    const combinedText = currentItemTokens.map(t => t.text).join(" ");
+    if (isItemNameText(combinedText)) {
+      itemCandidates.push({
+        text: combinedText,
+        y: currentItemTokens[0].y,
+        x: currentItemTokens[0].x,
+        height: currentItemTokens[0].height,
+      });
+    }
+  }
+
+  itemCandidates.sort((a, b) => a.y - b.y);
+
+  for (const item of itemCandidates) {
+    const tolerance = item.height * 1.5;
+    const matchingQuantity = quantityCandidates.find(q =>
+      Math.abs(q.y - item.y) < tolerance && q.x > item.x
+    );
+    const quantity = matchingQuantity ? parseInt(matchingQuantity.text, 10) : 0;
+    if (matchingQuantity) {
+      const idx = quantityCandidates.indexOf(matchingQuantity);
+      quantityCandidates.splice(idx, 1);
+    }
+
+    let name = item.text;
+    name = name.replace(/\s*\(\s*([A-Z])\s*\)\s*/, " ($1)");
+    name = name.replace(/\s+/g, " ").trim();
+
+    items.push({
+      sequence: items.length + 1,
+      name,
+      quantity,
+      unit: "EA",
+      unitPrice: 0,
+      amount: 0,
+      raw: `${name}: ${quantity}`,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * 품명인지 확인 (좌표 기반 파싱용)
+ */
+function isItemNameText(text: string): boolean {
+  const cleaned = text.replace(/\s*\([A-Z]\)\s*/g, "").replace(/\s+/g, "").trim();
+
+  // 알려진 품명 체크
+  for (const name of KNOWN_ITEM_NAMES) {
+    const nameNoSpace = name.replace(/\s+/g, "");
+    if (cleaned.includes(nameNoSpace) || nameNoSpace.includes(cleaned)) return true;
+  }
+
+  // 제외 키워드
+  const excluded = [
+    "품명", "납품", "수량", "비고", "상호", "등록번호", "공급", "사업장", "거래",
+    "담당자", "검수", "입회", "수거", "특이사항", "유한회사", "주식회사"
+  ];
+  for (const ex of excluded) {
+    if (cleaned.includes(ex)) return false;
+  }
+
+  // 2글자 이상의 한글
+  return cleaned.length >= 2;
+}
 
 /**
  * 품명인지 확인
@@ -341,7 +780,10 @@ export interface SaveOcrResult {
 export async function saveOcrScan(
   ocrResult: OcrResult,
   parsedData: ParsedInvoice,
-  provider: OcrProvider = "google"
+  provider: OcrProvider = "google",
+  supplierId?: string,
+  storeId?: string,
+  imageUrl?: string
 ): Promise<SaveOcrResult> {
   try {
     // items를 DB에 저장할 형태로 변환
@@ -361,6 +803,9 @@ export async function saveOcrScan(
         supplier: parsedData.supplier || null,
         document_number: parsedData.documentNumber || null,
         items: itemsForDb,
+        supplier_id: supplierId || null,
+        store_id: storeId || null,
+        image_url: imageUrl || null,
       })
       .select("id")
       .single();
@@ -379,19 +824,88 @@ export async function saveOcrScan(
 }
 
 /**
+ * OCR 스캔 조회 필터
+ */
+export interface OcrScanFilters {
+  supplierId?: string;
+  storeId?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
+
+/**
+ * OCR 스캔 조회 결과 타입
+ */
+export interface OcrScanRecord {
+  id: string;
+  provider: string;
+  confidence: number;
+  rawText: string;
+  documentDate: string | null;
+  supplier: string | null;
+  documentNumber: string | null;
+  items: Array<{ name: string; quantity: number; unit: string }>;
+  supplierId: string | null;
+  storeId: string | null;
+  supplierName: string | null;
+  storeName: string | null;
+  imageUrl: string | null;
+  createdAt: string;
+}
+
+/**
  * 저장된 OCR 스캔 목록 조회
  */
-export async function getOcrScans(limit = 20) {
-  const { data, error } = await supabase
+export async function getOcrScans(filters: OcrScanFilters = {}): Promise<OcrScanRecord[]> {
+  const { supplierId, storeId, startDate, endDate, limit = 50 } = filters;
+
+  let query = supabase
     .from("ocr_scans")
-    .select("*")
+    .select(`
+      *,
+      suppliers:supplier_id (name),
+      stores:store_id (name)
+    `)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  // 필터 적용
+  if (supplierId) {
+    query = query.eq("supplier_id", supplierId);
+  }
+  if (storeId) {
+    query = query.eq("store_id", storeId);
+  }
+  if (startDate) {
+    query = query.gte("document_date", startDate);
+  }
+  if (endDate) {
+    query = query.lte("document_date", endDate);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("OCR 조회 오류:", error);
     return [];
   }
 
-  return data;
+  // DB 결과를 타입에 맞게 변환
+  return data.map((row) => ({
+    id: row.id,
+    provider: row.provider,
+    confidence: row.confidence,
+    rawText: row.raw_text,
+    documentDate: row.document_date,
+    supplier: row.supplier,
+    documentNumber: row.document_number,
+    items: row.items || [],
+    supplierId: row.supplier_id,
+    storeId: row.store_id,
+    supplierName: row.suppliers?.name || null,
+    storeName: row.stores?.name || null,
+    imageUrl: row.image_url || null,
+    createdAt: row.created_at,
+  }));
 }

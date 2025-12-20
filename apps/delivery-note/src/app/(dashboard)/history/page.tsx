@@ -1,53 +1,64 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Filter, Download, Eye, MoreHorizontal } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter, ChevronDown, ChevronUp, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, formatCurrency } from "@/lib/utils";
-
-// 임시 데이터
-const mockTransactions = [
-  {
-    id: "1",
-    supplier: "ABC전기",
-    transactionDate: "2024-12-01",
-    documentNumber: "2024120001",
-    itemCount: 15,
-    totalAmount: 1500000,
-    status: "confirmed",
-  },
-  {
-    id: "2",
-    supplier: "삼성전기자재",
-    transactionDate: "2024-12-02",
-    documentNumber: "2024120002",
-    itemCount: 8,
-    totalAmount: 850000,
-    status: "pending",
-  },
-  {
-    id: "3",
-    supplier: "LS전선 대리점",
-    transactionDate: "2024-12-03",
-    documentNumber: "2024120003",
-    itemCount: 22,
-    totalAmount: 3200000,
-    status: "confirmed",
-  },
-];
-
-const statusLabels: Record<string, { label: string; className: string }> = {
-  pending: { label: "대기", className: "bg-yellow-100 text-yellow-800" },
-  processing: { label: "처리중", className: "bg-blue-100 text-blue-800" },
-  converted: { label: "변환완료", className: "bg-green-100 text-green-800" },
-  confirmed: { label: "확정", className: "bg-primary/10 text-primary" },
-  exported: { label: "내보내기완료", className: "bg-gray-100 text-gray-800" },
-};
+import { formatDate } from "@/lib/utils";
+import { getOcrScans, type OcrScanRecord } from "@/lib/ocr";
+import { getSuppliers } from "@/lib/suppliers";
+import { getStores } from "@/lib/stores";
+import type { Supplier, Store } from "@/types";
 
 export default function HistoryPage() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [scans, setScans] = useState<OcrScanRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 필터 상태
+  const [filterSupplierId, setFilterSupplierId] = useState<string>("");
+  const [filterStoreId, setFilterStoreId] = useState<string>("");
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // 상세 보기 상태
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    Promise.all([getSuppliers(), getStores()]).then(([suppliersData, storesData]) => {
+      setSuppliers(suppliersData);
+      setStores(storesData);
+    });
+  }, []);
+
+  // 스캔 데이터 로드 (필터 변경 시)
+  useEffect(() => {
+    async function loadScans() {
+      setIsLoading(true);
+      const data = await getOcrScans({
+        supplierId: filterSupplierId || undefined,
+        storeId: filterStoreId || undefined,
+        startDate: filterStartDate || undefined,
+        endDate: filterEndDate || undefined,
+      });
+      setScans(data);
+      setIsLoading(false);
+    }
+    loadScans();
+  }, [filterSupplierId, filterStoreId, filterStartDate, filterEndDate]);
+
+  // 필터 초기화
+  function resetFilters() {
+    setFilterSupplierId("");
+    setFilterStoreId("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+  }
+
+  const hasActiveFilters = filterSupplierId || filterStoreId || filterStartDate || filterEndDate;
 
   return (
     <div className="space-y-6">
@@ -56,91 +67,213 @@ export default function HistoryPage() {
         <div>
           <h1 className="text-2xl font-bold">처리 이력</h1>
           <p className="text-muted-foreground mt-1">
-            업로드하고 변환한 거래명세서 목록입니다.
+            업로드한 거래명세서 목록입니다.
           </p>
         </div>
-        <Button variant="outline">
-          <Download className="w-4 h-4 mr-2" />
-          내보내기
-        </Button>
       </div>
 
-      {/* Search & Filter */}
+      {/* Filter Toggle */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="거래처명, 문서번호로 검색..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Button variant="outline">
-              <Filter className="w-4 h-4 mr-2" />
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="gap-2"
+            >
+              <Filter className="w-4 h-4" />
               필터
+              {hasActiveFilters && (
+                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
+                  {[filterSupplierId, filterStoreId, filterStartDate, filterEndDate].filter(Boolean).length}
+                </span>
+              )}
+              {showFilters ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
             </Button>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                필터 초기화
+              </Button>
+            )}
           </div>
+
+          {/* Filter Panel */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 공급업체 필터 */}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">공급업체</label>
+                <select
+                  value={filterSupplierId}
+                  onChange={(e) => setFilterSupplierId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                >
+                  <option value="">전체</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 지점 필터 */}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">지점</label>
+                <select
+                  value={filterStoreId}
+                  onChange={(e) => setFilterStoreId(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                >
+                  <option value="">전체</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 시작일 */}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">시작일</label>
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="flex-1 text-sm bg-transparent outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* 종료일 */}
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">종료일</label>
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="flex-1 text-sm bg-transparent outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Transaction List */}
+      {/* Scan List */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">거래 목록</CardTitle>
+          <CardTitle className="text-base">
+            명세서 목록
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              ({scans.length}건)
+            </span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">거래일자</th>
-                  <th className="text-left py-3 px-4 font-medium">거래처</th>
-                  <th className="text-left py-3 px-4 font-medium">문서번호</th>
-                  <th className="text-center py-3 px-4 font-medium">품목수</th>
-                  <th className="text-right py-3 px-4 font-medium">금액</th>
-                  <th className="text-center py-3 px-4 font-medium">상태</th>
-                  <th className="text-center py-3 px-4 font-medium">액션</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockTransactions.map((tx) => (
-                  <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/50">
-                    <td className="py-3 px-4">{formatDate(tx.transactionDate)}</td>
-                    <td className="py-3 px-4 font-medium">{tx.supplier}</td>
-                    <td className="py-3 px-4 text-muted-foreground">
-                      {tx.documentNumber}
-                    </td>
-                    <td className="py-3 px-4 text-center">{tx.itemCount}</td>
-                    <td className="py-3 px-4 text-right">
-                      {formatCurrency(tx.totalAmount)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          statusLabels[tx.status]?.className
-                        }`}
-                      >
-                        {statusLabels[tx.status]?.label}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              로딩 중...
+            </div>
+          ) : scans.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {hasActiveFilters
+                ? "필터 조건에 맞는 데이터가 없습니다."
+                : "저장된 명세서가 없습니다."}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {scans.map((scan) => (
+                <div key={scan.id} className="border rounded-lg">
+                  {/* Summary Row */}
+                  <button
+                    onClick={() => setExpandedId(expandedId === scan.id ? null : scan.id)}
+                    className="w-full text-left p-4 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-medium">
+                            {scan.supplierName || "공급업체 미지정"}
+                          </span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="text-muted-foreground">
+                            {scan.storeName || "지점 미지정"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                          <span>{scan.documentDate ? formatDate(scan.documentDate) : "날짜 없음"}</span>
+                          <span>품목 {scan.items.length}개</span>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {expandedId === scan.id ? (
+                        <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Detail Panel */}
+                  {expandedId === scan.id && (
+                    <div className="border-t p-4 bg-muted/30">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* 이미지 */}
+                        {scan.imageUrl && (
+                          <div>
+                            <div className="text-sm font-medium mb-2">명세서 이미지</div>
+                            <a
+                              href={scan.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={scan.imageUrl}
+                                alt="명세서"
+                                className="rounded-lg border max-h-64 object-contain bg-white"
+                              />
+                            </a>
+                          </div>
+                        )}
+
+                        {/* 품목 목록 */}
+                        <div>
+                          <div className="text-sm font-medium mb-2">품목 목록</div>
+                          <div className="space-y-1">
+                            {scan.items.map((item, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between py-2 px-3 rounded bg-background"
+                              >
+                                <span>{item.name}</span>
+                                <span className="text-muted-foreground">
+                                  {item.quantity} {item.unit}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
+                        등록일: {formatDate(scan.createdAt)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

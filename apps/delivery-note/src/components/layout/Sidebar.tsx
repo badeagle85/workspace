@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Upload, History, Settings, Layers, X, Home, LayoutTemplate } from "lucide-react";
+import { Upload, History, Settings, Layers, X, Home, LayoutTemplate, Package, Building2, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useUiStore } from "@/stores/uiStore";
@@ -10,6 +10,9 @@ import { useUiStore } from "@/stores/uiStore";
 const navigation = [
   { name: "홈", href: "/", icon: Home },
   { name: "업로드", href: "/upload", icon: Upload },
+  { name: "표준품목 관리", href: "/products", icon: Package },
+  { name: "공급업체 관리", href: "/suppliers", icon: Building2 },
+  { name: "지점 관리", href: "/stores", icon: Store },
   { name: "템플릿", href: "/templates", icon: LayoutTemplate },
   { name: "처리 이력", href: "/history", icon: History },
   { name: "품명 매핑", href: "/mappings", icon: Layers },
@@ -18,7 +21,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { sidebarOpen, setSidebarOpen } = useUiStore();
+  const { sidebarOpen, setSidebarOpen, sidebarCollapsed } = useUiStore();
 
   return (
     <>
@@ -33,8 +36,12 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-background border-r transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 w-[210px] bg-background border-r transform transition-all duration-200 ease-in-out",
+          // Mobile: slide in/out
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          // Desktop: collapse/expand
+          "md:relative md:translate-x-0",
+          sidebarCollapsed && "md:w-0 md:border-r-0 md:overflow-hidden"
         )}
       >
         {/* Mobile close button */}
