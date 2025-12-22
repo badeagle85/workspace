@@ -265,7 +265,7 @@ export default function HistoryPage() {
                               총 {scan.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}개
                             </div>
                           </div>
-                          <div className="space-y-1 max-h-96 overflow-y-auto">
+                          <div className="space-y-1 max-h-[480px] overflow-y-auto">
                             {scan.items.map((item, index) => (
                               <div
                                 key={index}
