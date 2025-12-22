@@ -220,43 +220,44 @@ export default function HistoryPage() {
                   {/* Detail Panel */}
                   {expandedId === scan.id && (
                     <div className="border-t p-4 bg-muted/30 space-y-4">
-                      {/* 기본 정보 */}
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <div className="text-muted-foreground text-xs mb-1">공급업체</div>
-                          <div className="font-medium">{scan.supplierName || "-"}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground text-xs mb-1">지점</div>
-                          <div className="font-medium">{scan.storeName || "-"}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground text-xs mb-1">거래일자</div>
-                          <div className="font-medium">{scan.documentDate ? formatDate(scan.documentDate) : "-"}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {/* 이미지 */}
-                        {scan.imageUrl && (
-                          <div>
-                            <div className="text-sm font-medium mb-2">명세서 이미지</div>
-                            <a
-                              href={scan.imageUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block"
-                            >
-                              <img
-                                src={scan.imageUrl}
-                                alt="명세서"
-                                className="rounded-lg border max-h-80 object-contain bg-white"
-                              />
-                            </a>
+                      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+                        {/* 왼쪽: 기본 정보 + 이미지 */}
+                        <div className="space-y-4">
+                          <div className="space-y-3 text-sm">
+                            <div>
+                              <div className="text-muted-foreground text-xs mb-1">공급업체</div>
+                              <div className="font-medium">{scan.supplierName || "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground text-xs mb-1">지점</div>
+                              <div className="font-medium">{scan.storeName || "-"}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground text-xs mb-1">거래일자</div>
+                              <div className="font-medium">{scan.documentDate ? formatDate(scan.documentDate) : "-"}</div>
+                            </div>
                           </div>
-                        )}
 
-                        {/* 품목 목록 */}
+                          {/* 이미지 */}
+                          {scan.imageUrl && (
+                            <div>
+                              <a
+                                href={scan.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={scan.imageUrl}
+                                  alt="명세서"
+                                  className="rounded-lg border max-h-48 object-contain bg-white"
+                                />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 오른쪽: 품목 목록 */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-sm font-medium">품목 목록</div>
@@ -264,7 +265,7 @@ export default function HistoryPage() {
                               총 {scan.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}개
                             </div>
                           </div>
-                          <div className="space-y-1 max-h-80 overflow-y-auto">
+                          <div className="space-y-1 max-h-64 overflow-y-auto">
                             {scan.items.map((item, index) => (
                               <div
                                 key={index}
