@@ -76,8 +76,16 @@ export default function SupplierStatsPage() {
       }
     }
 
-    // 정렬 (수량 많은 순)
-    const sorted = Array.from(itemMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+    // 정렬 (합계 0인 것은 맨 뒤로, 나머지는 가나다순)
+    const sorted = Array.from(itemMap.values()).sort((a, b) => {
+      // 합계 0인 것은 맨 뒤로
+      if (a.totalQuantity === 0 && b.totalQuantity !== 0) return 1;
+      if (a.totalQuantity !== 0 && b.totalQuantity === 0) return -1;
+      // 가나다순
+      const nameA = a.standardProductName || a.name;
+      const nameB = b.standardProductName || b.name;
+      return nameA.localeCompare(nameB, 'ko');
+    });
     setAggregatedItems(sorted);
     setIsLoading(false);
   }
