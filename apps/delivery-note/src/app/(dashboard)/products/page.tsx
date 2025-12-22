@@ -17,10 +17,16 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<StandardProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
 
-  // 폼 상태
-  const [formData, setFormData] = useState({
+  // 새 품목 추가 폼 상태
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    category: "",
+    unit: "EA",
+  });
+
+  // 수정 폼 상태
+  const [editFormData, setEditFormData] = useState({
     name: "",
     category: "",
     unit: "EA",
@@ -38,59 +44,59 @@ export default function ProductsPage() {
     setIsLoading(false);
   }
 
-  // 폼 초기화
-  function resetForm() {
-    setFormData({ name: "", category: "", unit: "EA" });
+  // 수정 취소
+  function cancelEdit() {
     setEditingId(null);
-    setIsAdding(false);
-  }
-
-  // 추가 시작
-  function handleAdd() {
-    resetForm();
-    setIsAdding(true);
+    setEditFormData({ name: "", category: "", unit: "EA" });
   }
 
   // 수정 시작
   function handleEdit(product: StandardProduct) {
-    setFormData({
+    setEditFormData({
       name: product.name,
       category: product.category || "",
       unit: product.unit,
     });
     setEditingId(product.id);
-    setIsAdding(false);
   }
 
-  // 저장
-  async function handleSave() {
-    if (!formData.name.trim()) {
-      alert("품목명을 입력해주세요.");
+  // 새 품목 추가
+  async function handleAddNew() {
+    if (!newProduct.name.trim()) {
       return;
     }
 
     try {
-      if (editingId) {
-        // 수정
-        await updateStandardProduct(editingId, {
-          name: formData.name.trim(),
-          category: formData.category.trim() || undefined,
-          unit: formData.unit,
-        });
-      } else {
-        // 추가
-        await createStandardProduct({
-          name: formData.name.trim(),
-          category: formData.category.trim() || undefined,
-          unit: formData.unit,
-          sortOrder: products.length,
-          isActive: true,
-        });
-      }
-      resetForm();
+      await createStandardProduct({
+        name: newProduct.name.trim(),
+        category: newProduct.category.trim() || undefined,
+        unit: newProduct.unit,
+        sortOrder: products.length,
+        isActive: true,
+      });
+      setNewProduct({ name: "", category: "", unit: "EA" });
       loadProducts();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "저장에 실패했습니다.");
+      alert(error instanceof Error ? error.message : "추가에 실패했습니다.");
+    }
+  }
+
+  // 수정 저장
+  async function handleSaveEdit() {
+    if (!editFormData.name.trim() || !editingId) {
+      return;
+    }
+
+    try {
+      await updateStandardProduct(editingId, {
+        name: editFormData.name.trim(),
+        category: editFormData.category.trim() || undefined,
+        unit: editFormData.unit,
+      });
+      cancelEdit();
+      loadProducts();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "수정에 실패했습니다.");
     }
   }
 
@@ -108,62 +114,57 @@ export default function ProductsPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Package className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">표준 품목 관리</h1>
-            <p className="text-muted-foreground">
-              OCR 결과를 변환할 표준 품목을 등록합니다
-            </p>
-          </div>
+      <div className="flex items-center gap-3 mb-6">
+        <Package className="h-8 w-8 text-primary" />
+        <div>
+          <h1 className="text-2xl font-bold">표준 품목 관리</h1>
+          <p className="text-muted-foreground">
+            OCR 결과를 변환할 표준 품목을 등록합니다
+          </p>
         </div>
-        <Button onClick={handleAdd} disabled={isAdding || editingId !== null}>
-          <Plus className="h-4 w-4 mr-2" />
-          품목 추가
-        </Button>
       </div>
 
-      {/* 추가/수정 폼 */}
-      {(isAdding || editingId) && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>{editingId ? "품목 수정" : "새 품목 추가"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4">
-              <Input
-                placeholder="품목명 (예: 수건)"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="flex-1"
-              />
-              <Input
-                placeholder="카테고리 (선택)"
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value })
-                }
-                className="w-40"
-              />
-              <Input
-                placeholder="단위"
-                value={formData.unit}
-                onChange={(e) =>
-                  setFormData({ ...formData, unit: e.target.value })
-                }
-                className="w-24"
-              />
-              <Button onClick={handleSave}>저장</Button>
-              <Button variant="outline" onClick={resetForm}>
-                취소
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 새 품목 추가 폼 - 항상 노출 */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>새 품목 추가</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <Input
+              placeholder="품목명 (예: 수건)"
+              value={newProduct.name}
+              onChange={(e) =>
+                setNewProduct({ ...newProduct, name: e.target.value })
+              }
+              onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
+              className="flex-1"
+            />
+            <Input
+              placeholder="카테고리 (선택)"
+              value={newProduct.category}
+              onChange={(e) =>
+                setNewProduct({ ...newProduct, category: e.target.value })
+              }
+              onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
+              className="w-40"
+            />
+            <Input
+              placeholder="단위"
+              value={newProduct.unit}
+              onChange={(e) =>
+                setNewProduct({ ...newProduct, unit: e.target.value })
+              }
+              onKeyDown={(e) => e.key === "Enter" && handleAddNew()}
+              className="w-24"
+            />
+            <Button onClick={handleAddNew} disabled={!newProduct.name.trim()}>
+              <Plus className="h-4 w-4 mr-2" />
+              추가
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 품목 목록 */}
       <Card>
@@ -186,40 +187,84 @@ export default function ProductsPage() {
                   key={product.id}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-muted-foreground w-8 text-center">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <span className="font-medium">{product.name}</span>
-                      {product.category && (
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          [{product.category}]
-                        </span>
-                      )}
+                  {editingId === product.id ? (
+                    // 수정 모드
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-muted-foreground w-8 text-center">
+                        {index + 1}
+                      </span>
+                      <Input
+                        value={editFormData.name}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, name: e.target.value })
+                        }
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveEdit()}
+                        className="flex-1"
+                        autoFocus
+                      />
+                      <Input
+                        value={editFormData.category}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, category: e.target.value })
+                        }
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveEdit()}
+                        placeholder="카테고리"
+                        className="w-32"
+                      />
+                      <Input
+                        value={editFormData.unit}
+                        onChange={(e) =>
+                          setEditFormData({ ...editFormData, unit: e.target.value })
+                        }
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveEdit()}
+                        className="w-20"
+                      />
+                      <Button size="sm" onClick={handleSaveEdit}>
+                        저장
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit}>
+                        취소
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground mr-4">
-                      {product.unit}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(product)}
-                      disabled={isAdding || editingId !== null}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(product.id)}
-                      disabled={isAdding || editingId !== null}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  ) : (
+                    // 보기 모드
+                    <>
+                      <div className="flex items-center gap-4">
+                        <span className="text-muted-foreground w-8 text-center">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <span className="font-medium">{product.name}</span>
+                          {product.category && (
+                            <span className="ml-2 text-sm text-muted-foreground">
+                              [{product.category}]
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground mr-4">
+                          {product.unit}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(product)}
+                          disabled={editingId !== null}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(product.id)}
+                          disabled={editingId !== null}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
