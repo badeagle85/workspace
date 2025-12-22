@@ -192,30 +192,38 @@ export default function HistoryPage() {
                 : "저장된 명세서가 없습니다."}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="border rounded-lg overflow-hidden">
+              {/* Table Header */}
+              <div className="grid grid-cols-[100px_1fr_1fr_80px_40px] gap-2 px-4 py-3 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
+                <div>거래일자</div>
+                <div>공급업체</div>
+                <div>지점</div>
+                <div className="text-center">품목수</div>
+                <div></div>
+              </div>
+              {/* Table Body */}
               {scans.map((scan) => (
-                <div key={scan.id} className="border rounded-lg">
+                <div key={scan.id} className="border-b last:border-b-0">
                   {/* Summary Row */}
                   <button
                     onClick={() => setExpandedId(expandedId === scan.id ? null : scan.id)}
-                    className="w-full text-left p-4 hover:bg-muted/50 transition-colors"
+                    className="w-full text-left grid grid-cols-[100px_1fr_1fr_80px_40px] gap-2 px-4 py-3 hover:bg-muted/30 transition-colors items-center"
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="font-medium">
-                            {scan.supplierName || "공급업체 미지정"}
-                          </span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="text-muted-foreground">
-                            {scan.storeName || "지점 미지정"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                          <span>{scan.documentDate ? formatDate(scan.documentDate) : "날짜 없음"}</span>
-                          <span>품목 {scan.items.length}개</span>
-                        </div>
-                      </div>
+                    <div className="text-sm">
+                      {scan.documentDate ? formatDate(scan.documentDate) : "-"}
+                    </div>
+                    <div className="font-medium truncate">
+                      {scan.supplierName || <span className="text-muted-foreground">미지정</span>}
+                    </div>
+                    <div className="truncate text-muted-foreground">
+                      {scan.storeName || <span>미지정</span>}
+                    </div>
+                    <div className="text-center text-sm">
+                      <span className="inline-flex items-center justify-center bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-medium">
+                        {scan.items.length}
+                      </span>
+                    </div>
+                    <div className="flex justify-center">
                       {expandedId === scan.id ? (
                         <ChevronUp className="w-4 h-4 text-muted-foreground" />
                       ) : (
@@ -303,18 +311,6 @@ export default function HistoryPage() {
                           </div>
                         </div>
                       </div>
-
-                      {/* OCR 원본 텍스트 */}
-                      {scan.rawText && (
-                        <details className="group">
-                          <summary className="text-sm font-medium cursor-pointer hover:text-primary">
-                            OCR 원본 텍스트 보기
-                          </summary>
-                          <pre className="mt-2 text-xs whitespace-pre-wrap bg-background p-3 rounded-lg max-h-48 overflow-auto border">
-                            {scan.rawText}
-                          </pre>
-                        </details>
-                      )}
 
                       {/* 메타 정보 */}
                       <div className="pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
