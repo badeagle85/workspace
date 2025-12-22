@@ -260,7 +260,10 @@ export default function HistoryPage() {
                         {/* 오른쪽: 품목 목록 */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <div className="text-sm font-medium">품목 목록</div>
+                            <div className="text-sm font-medium">
+                              품목 목록
+                              <span className="ml-1 text-muted-foreground font-normal">({scan.items.length})</span>
+                            </div>
                             <div className="text-xs text-muted-foreground">
                               총 {scan.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}개
                             </div>
