@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter, ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { ChevronDown, ChevronUp, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
@@ -21,7 +21,6 @@ export default function HistoryPage() {
   const [filterStoreId, setFilterStoreId] = useState<string>("");
   const [filterStartDate, setFilterStartDate] = useState<string>("");
   const [filterEndDate, setFilterEndDate] = useState<string>("");
-  const [showFilters, setShowFilters] = useState(false);
 
   // 상세 보기 상태
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -72,101 +71,85 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Filter Toggle */}
+      {/* Filter */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="gap-2"
-            >
-              <Filter className="w-4 h-4" />
-              필터
-              {hasActiveFilters && (
-                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
-                  {[filterSupplierId, filterStoreId, filterStartDate, filterEndDate].filter(Boolean).length}
-                </span>
-              )}
-              {showFilters ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </Button>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                필터 초기화
-              </Button>
-            )}
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            {/* 공급업체 필터 */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">공급업체</label>
+              <select
+                value={filterSupplierId}
+                onChange={(e) => setFilterSupplierId(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+              >
+                <option value="">전체</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Filter Panel */}
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* 공급업체 필터 */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">공급업체</label>
-                <select
-                  value={filterSupplierId}
-                  onChange={(e) => setFilterSupplierId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                >
-                  <option value="">전체</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* 지점 필터 */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">지점</label>
+              <select
+                value={filterStoreId}
+                onChange={(e) => setFilterStoreId(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+              >
+                <option value="">전체</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {/* 지점 필터 */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">지점</label>
-                <select
-                  value={filterStoreId}
-                  onChange={(e) => setFilterStoreId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                >
-                  <option value="">전체</option>
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 시작일 */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">시작일</label>
-                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="date"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    className="flex-1 text-sm bg-transparent outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 종료일 */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">종료일</label>
-                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="date"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    className="flex-1 text-sm bg-transparent outline-none"
-                  />
-                </div>
+            {/* 시작일 */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">시작일</label>
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className="flex-1 text-sm bg-transparent outline-none"
+                />
               </div>
             </div>
-          )}
+
+            {/* 종료일 */}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">종료일</label>
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className="flex-1 text-sm bg-transparent outline-none"
+                />
+              </div>
+            </div>
+
+            {/* 초기화 버튼 */}
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
+                className="w-full"
+              >
+                초기화
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
