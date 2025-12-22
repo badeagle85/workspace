@@ -256,7 +256,19 @@ export default function HistoryPage() {
                                 key={index}
                                 className="flex items-center justify-between py-2 px-3 rounded bg-background"
                               >
-                                <span>{item.name}</span>
+                                <div className="flex items-center gap-2">
+                                  {item.standardProductName ? (
+                                    <>
+                                      <span className="font-medium">{item.standardProductName}</span>
+                                      <span className="text-xs text-muted-foreground">({item.name})</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>{item.name}</span>
+                                      <span className="text-xs text-orange-500">(미매핑)</span>
+                                    </>
+                                  )}
+                                </div>
                                 <span className="text-muted-foreground">
                                   {item.quantity} {item.unit}
                                 </span>

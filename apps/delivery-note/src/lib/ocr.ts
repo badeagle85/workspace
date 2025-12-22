@@ -142,6 +142,8 @@ export interface ParsedItem {
   raw: string; // 원본 라인
   originalQuantityText?: string; // OCR 원본 수량 텍스트 (보정 전)
   wasQuantityCorrected?: boolean; // 수량이 자동 보정되었는지 여부
+  standardProductId?: string; // 매핑된 표준품목 ID
+  standardProductName?: string; // 매핑된 표준품목 이름
 }
 
 /**
@@ -791,6 +793,8 @@ export async function saveOcrScan(
       name: item.name,
       quantity: item.quantity,
       unit: item.unit,
+      standardProductId: item.standardProductId || null,
+      standardProductName: item.standardProductName || null,
     }));
 
     const { data, error } = await supabase
@@ -845,7 +849,7 @@ export interface OcrScanRecord {
   documentDate: string | null;
   supplier: string | null;
   documentNumber: string | null;
-  items: Array<{ name: string; quantity: number; unit: string }>;
+  items: Array<{ name: string; quantity: number; unit: string; standardProductId?: string; standardProductName?: string }>;
   supplierId: string | null;
   storeId: string | null;
   supplierName: string | null;

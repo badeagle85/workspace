@@ -269,15 +269,20 @@ export default function GoogleUploadPage() {
       const parsedData: ParsedInvoice = {
         date: documentDate,
         documentNumber: undefined,
-        items: validItems.map((item, index) => ({
-          sequence: index + 1,
-          name: item.name.trim(),
-          quantity: item.quantity || 0,
-          unit: item.unit || "EA",
-          unitPrice: 0,
-          amount: 0,
-          raw: `${item.name}: ${item.quantity}`,
-        })),
+        items: validItems.map((item, index) => {
+          const matchedProduct = standardProducts.find(p => p.id === item.standardProductId);
+          return {
+            sequence: index + 1,
+            name: item.name.trim(),
+            quantity: item.quantity || 0,
+            unit: item.unit || "EA",
+            unitPrice: 0,
+            amount: 0,
+            raw: `${item.name}: ${item.quantity}`,
+            standardProductId: item.standardProductId,
+            standardProductName: matchedProduct?.name,
+          };
+        }),
         totalAmount: undefined,
       };
 
