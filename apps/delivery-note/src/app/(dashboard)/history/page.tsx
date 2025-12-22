@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { ChevronDown, ChevronUp, Calendar, Search, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
@@ -25,29 +25,27 @@ export default function HistoryPage() {
   // 상세 보기 상태
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // 검색 함수
+  async function handleSearch() {
+    setIsLoading(true);
+    const data = await getOcrScans({
+      supplierId: filterSupplierId || undefined,
+      storeId: filterStoreId || undefined,
+      startDate: filterStartDate || undefined,
+      endDate: filterEndDate || undefined,
+    });
+    setScans(data);
+    setIsLoading(false);
+  }
+
   // 초기 데이터 로드
   useEffect(() => {
     Promise.all([getSuppliers(), getStores()]).then(([suppliersData, storesData]) => {
       setSuppliers(suppliersData);
       setStores(storesData);
     });
+    handleSearch();
   }, []);
-
-  // 스캔 데이터 로드 (필터 변경 시)
-  useEffect(() => {
-    async function loadScans() {
-      setIsLoading(true);
-      const data = await getOcrScans({
-        supplierId: filterSupplierId || undefined,
-        storeId: filterStoreId || undefined,
-        startDate: filterStartDate || undefined,
-        endDate: filterEndDate || undefined,
-      });
-      setScans(data);
-      setIsLoading(false);
-    }
-    loadScans();
-  }, [filterSupplierId, filterStoreId, filterStartDate, filterEndDate]);
 
   // 필터 초기화
   function resetFilters() {
@@ -73,8 +71,8 @@ export default function HistoryPage() {
 
       {/* Filter */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* 공급업체 필터 */}
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">공급업체</label>
@@ -136,19 +134,23 @@ export default function HistoryPage() {
                 />
               </div>
             </div>
+          </div>
 
-            {/* 초기화 버튼 */}
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={resetFilters}
-                disabled={!hasActiveFilters}
-                className="w-full"
-              >
-                초기화
-              </Button>
-            </div>
+          {/* 검색/초기화 버튼 */}
+          <div className="flex items-center gap-2">
+            <Button onClick={handleSearch} className="gap-2">
+              <Search className="w-4 h-4" />
+              검색
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              title="필터 초기화"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
           </div>
         </CardContent>
       </Card>
