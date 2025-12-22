@@ -168,10 +168,7 @@ export default function SupplierStatsPage() {
                           <span className="ml-2 text-xs text-muted-foreground">({item.name})</span>
                         </>
                       ) : (
-                        <>
-                          <span>{item.name}</span>
-                          <span className="ml-2 text-xs text-orange-500">(미매핑)</span>
-                        </>
+                        <span>{item.name}</span>
                       )}
                     </div>
                     <div className="text-right font-mono">
