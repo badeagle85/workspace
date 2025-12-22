@@ -226,7 +226,27 @@ export default function HistoryPage() {
 
                   {/* Detail Panel */}
                   {expandedId === scan.id && (
-                    <div className="border-t p-4 bg-muted/30">
+                    <div className="border-t p-4 bg-muted/30 space-y-4">
+                      {/* 기본 정보 */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1">공급업체</div>
+                          <div className="font-medium">{scan.supplierName || "-"}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1">지점</div>
+                          <div className="font-medium">{scan.storeName || "-"}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1">문서 날짜</div>
+                          <div className="font-medium">{scan.documentDate ? formatDate(scan.documentDate) : "-"}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground text-xs mb-1">문서 번호</div>
+                          <div className="font-medium">{scan.documentNumber || "-"}</div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* 이미지 */}
                         {scan.imageUrl && (
@@ -241,7 +261,7 @@ export default function HistoryPage() {
                               <img
                                 src={scan.imageUrl}
                                 alt="명세서"
-                                className="rounded-lg border max-h-64 object-contain bg-white"
+                                className="rounded-lg border max-h-80 object-contain bg-white"
                               />
                             </a>
                           </div>
@@ -249,14 +269,20 @@ export default function HistoryPage() {
 
                         {/* 품목 목록 */}
                         <div>
-                          <div className="text-sm font-medium mb-2">품목 목록</div>
-                          <div className="space-y-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-sm font-medium">품목 목록</div>
+                            <div className="text-xs text-muted-foreground">
+                              총 {scan.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}개
+                            </div>
+                          </div>
+                          <div className="space-y-1 max-h-80 overflow-y-auto">
                             {scan.items.map((item, index) => (
                               <div
                                 key={index}
                                 className="flex items-center justify-between py-2 px-3 rounded bg-background"
                               >
                                 <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-5">{index + 1}</span>
                                   {item.standardProductName ? (
                                     <>
                                       <span className="font-medium">{item.standardProductName}</span>
@@ -269,7 +295,7 @@ export default function HistoryPage() {
                                     </>
                                   )}
                                 </div>
-                                <span className="text-muted-foreground">
+                                <span className="text-muted-foreground font-mono">
                                   {item.quantity} {item.unit}
                                 </span>
                               </div>
@@ -277,8 +303,29 @@ export default function HistoryPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="mt-4 pt-3 border-t text-xs text-muted-foreground">
-                        등록일: {formatDate(scan.createdAt)}
+
+                      {/* OCR 원본 텍스트 */}
+                      {scan.rawText && (
+                        <details className="group">
+                          <summary className="text-sm font-medium cursor-pointer hover:text-primary">
+                            OCR 원본 텍스트 보기
+                          </summary>
+                          <pre className="mt-2 text-xs whitespace-pre-wrap bg-background p-3 rounded-lg max-h-48 overflow-auto border">
+                            {scan.rawText}
+                          </pre>
+                        </details>
+                      )}
+
+                      {/* 메타 정보 */}
+                      <div className="pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-4">
+                          <span>등록일: {formatDate(scan.createdAt)}</span>
+                          <span>OCR: {scan.provider === "google_vision" ? "Google Vision" : "Tesseract"}</span>
+                          {scan.confidence > 0 && (
+                            <span>신뢰도: {Math.round(scan.confidence)}%</span>
+                          )}
+                        </div>
+                        <span className="font-mono text-[10px]">{scan.id.slice(0, 8)}</span>
                       </div>
                     </div>
                   )}
