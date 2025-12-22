@@ -4,24 +4,30 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getSuppliers } from "@/lib/suppliers";
-import { getOcrScans, type OcrScanRecord } from "@/lib/ocr";
+import { getOcrScans } from "@/lib/ocr";
 import type { Supplier } from "@/types";
 
-interface AggregatedItem {
+interface MonthlyData {
+  [month: string]: number;
+}
+
+interface ItemTrend {
   name: string;
   standardProductName: string | null;
-  totalQuantity: number;
   unit: string;
-  count: number; // 몇 건의 명세서에 포함되었는지
+  monthlyData: MonthlyData;
+  total: number;
 }
 
 export default function SupplierStatsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
-  const [aggregatedItems, setAggregatedItems] = useState<AggregatedItem[]>([]);
+  const [itemTrends, setItemTrends] = useState<ItemTrend[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [totalScans, setTotalScans] = useState(0);
+  const [months, setMonths] = useState<string[]>([]);
 
   // 연도 목록 (최근 5년)
   const currentYear = new Date().getFullYear();
@@ -53,51 +59,88 @@ export default function SupplierStatsPage() {
 
     setTotalScans(scans.length);
 
-    // 품목별 합산
-    const itemMap = new Map<string, AggregatedItem>();
+    // 월별로 품목 집계
+    const itemMap = new Map<string, ItemTrend>();
+    const monthSet = new Set<string>();
 
     for (const scan of scans) {
+      if (!scan.documentDate) continue;
+
+      const month = scan.documentDate.substring(0, 7); // YYYY-MM
+      monthSet.add(month);
+
       for (const item of scan.items) {
         const key = item.standardProductName || item.name;
 
-        if (itemMap.has(key)) {
-          const existing = itemMap.get(key)!;
-          existing.totalQuantity += item.quantity || 0;
-          existing.count += 1;
-        } else {
+        if (!itemMap.has(key)) {
           itemMap.set(key, {
             name: item.name,
             standardProductName: item.standardProductName || null,
-            totalQuantity: item.quantity || 0,
             unit: item.unit || "",
-            count: 1,
+            monthlyData: {},
+            total: 0,
           });
         }
+
+        const trend = itemMap.get(key)!;
+        trend.monthlyData[month] = (trend.monthlyData[month] || 0) + (item.quantity || 0);
+        trend.total += item.quantity || 0;
       }
     }
 
+    // 월 정렬
+    const sortedMonths = Array.from(monthSet).sort();
+    setMonths(sortedMonths);
+
     // 정렬 (합계 0인 것은 맨 뒤로, 나머지는 가나다순)
     const sorted = Array.from(itemMap.values()).sort((a, b) => {
-      // 합계 0인 것은 맨 뒤로
-      if (a.totalQuantity === 0 && b.totalQuantity !== 0) return 1;
-      if (a.totalQuantity !== 0 && b.totalQuantity === 0) return -1;
-      // 가나다순
+      if (a.total === 0 && b.total !== 0) return 1;
+      if (a.total !== 0 && b.total === 0) return -1;
       const nameA = a.standardProductName || a.name;
       const nameB = b.standardProductName || b.name;
       return nameA.localeCompare(nameB, 'ko');
     });
-    setAggregatedItems(sorted);
+
+    setItemTrends(sorted);
+    // 기본적으로 합계가 0이 아닌 모든 품목 선택
+    setSelectedItems(new Set(sorted.filter(item => item.total > 0).map(item => item.standardProductName || item.name)));
     setIsLoading(false);
   }
 
+  // 품목 선택 토글
+  function toggleItem(key: string) {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(key)) {
+      newSelected.delete(key);
+    } else {
+      newSelected.add(key);
+    }
+    setSelectedItems(newSelected);
+  }
+
+  // 전체 선택/해제
+  function toggleAll() {
+    if (selectedItems.size === itemTrends.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(itemTrends.map(item => item.standardProductName || item.name)));
+    }
+  }
+
   const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
+  const filteredItems = itemTrends.filter(item => selectedItems.has(item.standardProductName || item.name));
+
+  // 월 표시 형식
+  function formatMonth(month: string) {
+    return month.substring(5) + "월"; // "2025-10" -> "10월"
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">공급업체별 현황</h1>
         <p className="text-muted-foreground mt-1">
-          공급업체별 연간 품목 합산 현황을 확인합니다.
+          공급업체별 월별 품목 현황을 확인합니다.
         </p>
       </div>
 
@@ -146,58 +189,126 @@ export default function SupplierStatsPage() {
         </CardContent>
       </Card>
 
-      {/* 결과 */}
-      {aggregatedItems.length > 0 && (
+      {/* 품목 선택 */}
+      {itemTrends.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">
+                품목 선택
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({selectedItems.size}/{itemTrends.length}개 선택)
+                </span>
+              </CardTitle>
+              <Button variant="outline" size="sm" onClick={toggleAll}>
+                {selectedItems.size === itemTrends.length ? "전체 해제" : "전체 선택"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {itemTrends.map((item) => {
+                const key = item.standardProductName || item.name;
+                const isSelected = selectedItems.has(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleItem(key)}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary"
+                    } ${item.total === 0 ? "opacity-50" : ""}`}
+                  >
+                    {item.standardProductName || item.name}
+                    {item.total > 0 && (
+                      <span className="ml-1 text-xs opacity-70">({item.total})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 월별 현황 테이블 */}
+      {filteredItems.length > 0 && months.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {selectedSupplier?.name} - {selectedYear}년 품목별 합산
+              {selectedSupplier?.name} - {selectedYear}년 월별 현황
               <span className="ml-2 text-sm font-normal text-muted-foreground">
-                (명세서 {totalScans}건, 품목 {aggregatedItems.length}종)
+                (명세서 {totalScans}건)
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-lg overflow-hidden">
-              {/* 테이블 헤더 */}
-              <div className="grid grid-cols-[1fr_100px_80px] gap-2 px-4 py-3 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
-                <div>품목명</div>
-                <div className="text-right">합계</div>
-                <div className="text-right">건수</div>
-              </div>
-              {/* 테이블 바디 */}
-              <div>
-                {aggregatedItems.map((item, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[1fr_100px_80px] gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
-                  >
-                    <div>
-                      {item.standardProductName ? (
-                        <>
-                          <span className="font-medium">{item.standardProductName}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">({item.name})</span>
-                        </>
-                      ) : (
-                        <span>{item.name}</span>
-                      )}
-                    </div>
-                    <div className="text-right font-mono">
-                      {item.totalQuantity.toLocaleString()} {item.unit}
-                    </div>
-                    <div className="text-right text-muted-foreground">
-                      {item.count}건
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">품목명</th>
+                    {months.map((month) => (
+                      <th key={month} className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
+                        {formatMonth(month)}
+                      </th>
+                    ))}
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">합계</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.map((item, index) => {
+                    const key = item.standardProductName || item.name;
+                    return (
+                      <tr key={key} className="border-b last:border-b-0 hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          {item.standardProductName ? (
+                            <>
+                              <span className="font-medium">{item.standardProductName}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({item.name})</span>
+                            </>
+                          ) : (
+                            <span>{item.name}</span>
+                          )}
+                        </td>
+                        {months.map((month) => (
+                          <td key={month} className="text-right px-4 py-3 font-mono">
+                            {item.monthlyData[month] ? item.monthlyData[month].toLocaleString() : "-"}
+                          </td>
+                        ))}
+                        <td className="text-right px-4 py-3 font-mono font-medium">
+                          {item.total.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* 합계 행 */}
+                <tfoot>
+                  <tr className="bg-muted/30 font-medium">
+                    <td className="px-4 py-3">합계</td>
+                    {months.map((month) => {
+                      const monthTotal = filteredItems.reduce((sum, item) => sum + (item.monthlyData[month] || 0), 0);
+                      return (
+                        <td key={month} className="text-right px-4 py-3 font-mono">
+                          {monthTotal > 0 ? monthTotal.toLocaleString() : "-"}
+                        </td>
+                      );
+                    })}
+                    <td className="text-right px-4 py-3 font-mono">
+                      {filteredItems.reduce((sum, item) => sum + item.total, 0).toLocaleString()}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* 결과 없음 */}
-      {!isLoading && totalScans === 0 && selectedSupplierId && aggregatedItems.length === 0 && (
+      {!isLoading && totalScans === 0 && selectedSupplierId && itemTrends.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
           해당 기간에 데이터가 없습니다.
         </div>
