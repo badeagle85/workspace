@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Calendar, Search, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Calendar, Search, RotateCcw, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
@@ -240,7 +240,7 @@ export default function HistoryPage() {
 
                           {/* 이미지 */}
                           {scan.imageUrl && (
-                            <div>
+                            <div className="space-y-2">
                               <a
                                 href={scan.imageUrl}
                                 target="_blank"
@@ -252,6 +252,15 @@ export default function HistoryPage() {
                                   alt="명세서"
                                   className="rounded-lg border max-h-48 object-contain bg-white"
                                 />
+                              </a>
+                              <a
+                                href={scan.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                원본 이미지 보기
                               </a>
                             </div>
                           )}
