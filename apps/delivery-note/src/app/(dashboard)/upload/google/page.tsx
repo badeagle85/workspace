@@ -761,11 +761,11 @@ export default function GoogleUploadPage() {
                   onChange={(e) => updateItem(item.id, "standardProductId", e.target.value)}
                   className={`flex-1 px-2 py-1.5 border rounded-md text-sm ${
                     item.standardProductId
-                      ? "bg-green-50 border-green-300"
-                      : "bg-background"
+                      ? "bg-green-50 border-green-300 text-foreground"
+                      : "bg-muted/50 border-dashed text-muted-foreground"
                   }`}
                 >
-                  <option value="">표준 품목</option>
+                  <option value="" className="text-muted-foreground">미지정</option>
                   {standardProducts.map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name}
