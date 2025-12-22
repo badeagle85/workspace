@@ -138,10 +138,6 @@ export default function HistoryPage() {
 
           {/* 검색/초기화 버튼 */}
           <div className="flex items-center justify-end gap-2">
-            <Button onClick={handleSearch} className="gap-2">
-              <Search className="w-4 h-4" />
-              검색
-            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -150,6 +146,10 @@ export default function HistoryPage() {
               title="필터 초기화"
             >
               <RotateCcw className="w-4 h-4" />
+            </Button>
+            <Button onClick={handleSearch} className="gap-2">
+              <Search className="w-4 h-4" />
+              검색
             </Button>
           </div>
         </CardContent>
