@@ -221,7 +221,7 @@ export default function HistoryPage() {
                   {expandedId === scan.id && (
                     <div className="border-t p-4 bg-muted/30 space-y-4">
                       {/* 기본 정보 */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                      <div className="grid grid-cols-3 gap-4 text-sm">
                         <div>
                           <div className="text-muted-foreground text-xs mb-1">공급업체</div>
                           <div className="font-medium">{scan.supplierName || "-"}</div>
@@ -231,12 +231,8 @@ export default function HistoryPage() {
                           <div className="font-medium">{scan.storeName || "-"}</div>
                         </div>
                         <div>
-                          <div className="text-muted-foreground text-xs mb-1">문서 날짜</div>
+                          <div className="text-muted-foreground text-xs mb-1">거래일자</div>
                           <div className="font-medium">{scan.documentDate ? formatDate(scan.documentDate) : "-"}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground text-xs mb-1">문서 번호</div>
-                          <div className="font-medium">{scan.documentNumber || "-"}</div>
                         </div>
                       </div>
 
