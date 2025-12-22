@@ -137,7 +137,7 @@ export default function HistoryPage() {
           </div>
 
           {/* 검색/초기화 버튼 */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <Button onClick={handleSearch} className="gap-2">
               <Search className="w-4 h-4" />
               검색
