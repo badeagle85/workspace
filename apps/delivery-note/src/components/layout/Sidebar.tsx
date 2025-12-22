@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Upload, History, Settings, Layers, X, Home, LayoutTemplate, Package, Building2, Store, ChevronsLeft, ChevronsRight, FolderCog, ChevronDown } from "lucide-react";
+import { Upload, History, Settings, Layers, X, Home, LayoutTemplate, Package, Building2, Store, ChevronsLeft, ChevronsRight, FolderCog, ChevronDown, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useUiStore } from "@/stores/uiStore";
@@ -13,6 +13,7 @@ const navigation = [
   { name: "업로드", href: "/upload", icon: Upload },
   { name: "템플릿", href: "/templates", icon: LayoutTemplate },
   { name: "처리 이력", href: "/history", icon: History },
+  { name: "공급업체별 현황", href: "/stats/suppliers", icon: BarChart3 },
   { name: "품명 매핑", href: "/mappings", icon: Layers },
   { name: "설정", href: "/settings", icon: Settings },
 ];
