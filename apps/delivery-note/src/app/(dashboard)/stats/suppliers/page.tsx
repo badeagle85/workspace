@@ -95,14 +95,14 @@ export default function SupplierStatsPage() {
 
       {/* 필터 */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-end gap-4">
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">공급업체</label>
               <select
                 value={selectedSupplierId}
                 onChange={(e) => setSelectedSupplierId(e.target.value)}
-                className="w-64 px-3 py-2 border rounded-md text-sm bg-background"
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
               >
                 <option value="">선택하세요</option>
                 {suppliers.map((s) => (
@@ -118,7 +118,7 @@ export default function SupplierStatsPage() {
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-32 px-3 py-2 border rounded-md text-sm bg-background"
+                className="w-full px-3 py-2 border rounded-md text-sm bg-background"
               >
                 {years.map((year) => (
                   <option key={year} value={year}>
@@ -127,7 +127,10 @@ export default function SupplierStatsPage() {
                 ))}
               </select>
             </div>
+          </div>
 
+          {/* 검색 버튼 */}
+          <div className="flex items-center justify-end">
             <Button onClick={handleSearch} disabled={isLoading}>
               {isLoading ? "조회중..." : "조회"}
             </Button>
