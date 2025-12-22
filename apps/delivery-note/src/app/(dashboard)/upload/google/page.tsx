@@ -12,6 +12,7 @@ import {
   Trash2,
   Scan,
   X,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { DropZone } from "@/components/upload/DropZone";
@@ -100,6 +101,7 @@ export default function GoogleUploadPage() {
   const [documentDate, setDocumentDate] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [ocrTextOpen, setOcrTextOpen] = useState(false);
 
   const hasFiles = files.length > 0;
   const firstFile = files[0];
@@ -540,17 +542,31 @@ export default function GoogleUploadPage() {
             </CardContent>
           </Card>
 
-          {/* OCR 원본 텍스트 */}
+          {/* OCR 원본 텍스트 (아코디언) */}
           {ocrText && (
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">OCR 원본 텍스트</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-xs whitespace-pre-wrap bg-muted p-3 rounded-lg max-h-48 overflow-auto">
-                  {ocrText}
-                </pre>
-              </CardContent>
+              <button
+                onClick={() => setOcrTextOpen(!ocrTextOpen)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/50 transition-colors"
+              >
+                <span className="text-base font-semibold">OCR 원본 텍스트</span>
+                <ChevronDown
+                  className={`w-5 h-5 text-muted-foreground transition-transform ${
+                    ocrTextOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              <div
+                className={`overflow-hidden transition-all duration-200 ${
+                  ocrTextOpen ? "max-h-96" : "max-h-0"
+                }`}
+              >
+                <CardContent className="pt-0">
+                  <pre className="text-xs whitespace-pre-wrap bg-muted p-3 rounded-lg max-h-48 overflow-auto">
+                    {ocrText}
+                  </pre>
+                </CardContent>
+              </div>
             </Card>
           )}
         </div>
