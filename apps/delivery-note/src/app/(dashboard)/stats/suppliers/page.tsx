@@ -158,7 +158,7 @@ export default function SupplierStatsPage() {
                 <div className="text-right">건수</div>
               </div>
               {/* 테이블 바디 */}
-              <div className="max-h-[600px] overflow-y-auto">
+              <div>
                 {aggregatedItems.map((item, index) => (
                   <div
                     key={index}
