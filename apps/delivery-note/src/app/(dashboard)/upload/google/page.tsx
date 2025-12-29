@@ -34,6 +34,7 @@ import {
   extractTextFromImage,
   parseInvoiceText,
   saveOcrScan,
+  checkDuplicateScan,
   type OcrResult,
   type ParsedInvoice,
 } from "@/lib/ocr";
@@ -41,6 +42,8 @@ import { getStandardProducts } from "@/lib/products";
 import { getSuppliers, createSupplier } from "@/lib/suppliers";
 import { getStores, createStore } from "@/lib/stores";
 import { uploadImage } from "@/lib/imageServer";
+import { getMappingsFromHistory, saveMappings, normalizeItemName } from "@/lib/mappings";
+import { useToastStore } from "@/stores/toastStore";
 import type { StandardProduct, Supplier, Store } from "@/types";
 
 // 품목 아이템
@@ -62,6 +65,7 @@ export default function GoogleUploadPage() {
     increment,
     isLoading: isUsageLoading,
   } = useGoogleVisionUsage();
+  const { addToast } = useToastStore();
 
   // 표준 품목
   const [standardProducts, setStandardProducts] = useState<StandardProduct[]>([]);
@@ -82,7 +86,6 @@ export default function GoogleUploadPage() {
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [ocrText, setOcrText] = useState<string>("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   // 필드별 에러 상태
   const [supplierError, setSupplierError] = useState<string | null>(null);
@@ -100,7 +103,6 @@ export default function GoogleUploadPage() {
   ]);
   const [documentDate, setDocumentDate] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [ocrTextOpen, setOcrTextOpen] = useState(false);
 
   const hasFiles = files.length > 0;
@@ -128,20 +130,60 @@ export default function GoogleUploadPage() {
     }
   }, [firstFile]);
 
+  // 공급업체 선택 시 이전 매핑 자동 적용
+  useEffect(() => {
+    if (!selectedSupplierId) return;
+
+    // 매핑되지 않은 품목이 있는지 확인
+    const unmappedItems = items.filter(
+      (item) => item.name.trim() && !item.standardProductId
+    );
+    if (unmappedItems.length === 0) return;
+
+    // 이전 매핑 가져와서 적용
+    getMappingsFromHistory(selectedSupplierId).then((mappingMap) => {
+      if (mappingMap.size === 0) return;
+
+      setItems((prevItems) =>
+        prevItems.map((item) => {
+          // 이미 매핑된 품목은 스킵
+          if (item.standardProductId) return item;
+          if (!item.name.trim()) return item;
+
+          // 정규화된 이름으로 매핑 검색
+          const normalizedName = normalizeItemName(item.name);
+          const mapping = mappingMap.get(normalizedName);
+
+          if (mapping) {
+            console.log(
+              `자동 매핑 적용: "${item.name}" → "${mapping.standardProductName}"`
+            );
+            return {
+              ...item,
+              standardProductId: mapping.standardProductId,
+            };
+          }
+
+          return item;
+        })
+      );
+    });
+  }, [selectedSupplierId, items.length]); // items.length로 새 품목 추가 시에도 트리거
+
   // OCR 처리
   async function handleOcr() {
     if (!firstFile?.file) return;
 
     const result = await increment();
     if (!result.success) {
-      setError(
-        `이번 달 사용 한도(${GOOGLE_VISION_MONTHLY_LIMIT}건)에 도달했습니다.`
+      addToast(
+        `이번 달 사용 한도(${GOOGLE_VISION_MONTHLY_LIMIT}건)에 도달했습니다.`,
+        "error"
       );
       return;
     }
 
     setIsProcessing(true);
-    setError(null);
     setProgress(0);
 
     try {
@@ -208,8 +250,9 @@ export default function GoogleUploadPage() {
 
       setItems(newItems);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "OCR 처리 중 오류가 발생했습니다."
+      addToast(
+        err instanceof Error ? err.message : "OCR 처리 중 오류가 발생했습니다.",
+        "error"
       );
     } finally {
       setIsProcessing(false);
@@ -221,7 +264,7 @@ export default function GoogleUploadPage() {
     // 1. 품목 검증
     const validItems = items.filter((item) => item.name.trim());
     if (validItems.length === 0) {
-      setError("저장할 품목이 없습니다. 품목명을 입력해주세요.");
+      addToast("저장할 품목이 없습니다. 품목명을 입력해주세요.", "error");
       return;
     }
 
@@ -246,8 +289,26 @@ export default function GoogleUploadPage() {
       return;
     }
 
+    // 3. 중복 체크 (날짜 + 공급업체 + 지점)
+    if (documentDate) {
+      const duplicate = await checkDuplicateScan(
+        documentDate,
+        selectedSupplierId,
+        selectedStoreId
+      );
+
+      if (duplicate) {
+        const supplierName = suppliers.find(s => s.id === selectedSupplierId)?.name || "";
+        const storeName = stores.find(s => s.id === selectedStoreId)?.name || "";
+        addToast(
+          `이미 ${documentDate} ${supplierName} → ${storeName} 기록이 있습니다. 처리이력에서 확인해주세요.`,
+          "error"
+        );
+        return;
+      }
+    }
+
     setIsSaving(true);
-    setError(null);
 
     try {
       const finalSupplierId = selectedSupplierId;
@@ -302,12 +363,25 @@ export default function GoogleUploadPage() {
       );
 
       if (saveResult.success) {
-        setSaveSuccess(true);
+        // 매핑된 품목들을 product_mappings 테이블에도 저장 (다음 번에 자동 매핑 적용용)
+        const mappedItems = validItems
+          .filter((item) => item.standardProductId)
+          .map((item) => ({
+            name: item.name.trim(),
+            standardProductId: item.standardProductId,
+          }));
+
+        if (mappedItems.length > 0) {
+          await saveMappings(finalSupplierId, mappedItems);
+        }
+
+        addToast("저장되었습니다!", "success");
+        handleReset();
       } else {
-        setError(saveResult.error || "저장에 실패했습니다.");
+        addToast(saveResult.error || "저장에 실패했습니다.", "error");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장에 실패했습니다.");
+      addToast(err instanceof Error ? err.message : "저장에 실패했습니다.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -317,7 +391,6 @@ export default function GoogleUploadPage() {
   function handleReset() {
     setOcrResult(null);
     setOcrText("");
-    setError(null);
     setSupplierError(null);
     setStoreError(null);
     setProgress(0);
@@ -327,7 +400,6 @@ export default function GoogleUploadPage() {
     setSupplierName("");
     setSelectedStoreId("");
     setStoreName("");
-    setSaveSuccess(false);
     setIsAddingSupplier(false);
     setIsAddingStore(false);
     setNewSupplierName("");
@@ -815,40 +887,17 @@ export default function GoogleUploadPage() {
         </Card>
       </div>
 
-      {/* 에러 메시지 */}
-      {error && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 성공 메시지 */}
-      {saveSuccess && (
-        <Card className="border-green-500 bg-green-50 dark:bg-green-950/30">
-          <CardContent className="pt-6">
-            <p className="text-sm text-green-600">저장되었습니다!</p>
-          </CardContent>
-        </Card>
-      )}
-
       {/* 저장 버튼 */}
       <div className="flex justify-end">
         <Button
           size="lg"
           onClick={handleSave}
-          disabled={items.length === 0 || isSaving || saveSuccess}
+          disabled={items.length === 0 || isSaving}
         >
           {isSaving ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               저장 중...
-            </>
-          ) : saveSuccess ? (
-            <>
-              <Check className="w-4 h-4 mr-2" />
-              저장 완료
             </>
           ) : (
             "저장하기"

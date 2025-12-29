@@ -182,42 +182,50 @@ export function parseInvoiceText(ocrResult: OcrResult | null): ParsedInvoice {
   let supplier: string | undefined;
   let storeName: string | undefined;
 
-  // 전체 텍스트에서 공급받는자/공급자 섹션 찾기
-  // 패턴: "공급받는자" ... "상호" ... "공급자" ... "상호"
-  const receiverSection = text.match(/공\s*급\s*받\s*는\s*자[\s\S]*?상\s*호[:\s]*([^\n공]+)/);
-  const supplierSection = text.match(/공\s*급\s*자[\s\S]*?상\s*호[:\s]*([^\n]+)/);
-
-  if (receiverSection) {
-    // 공급받는자 상호 (지점)
-    storeName = receiverSection[1].trim()
-      .replace(/등록번호[\s\S]*/g, "") // 등록번호 이후 제거
-      .replace(/\s{2,}/g, " ")
-      .trim();
-    console.log("공급받는자 상호 (지점):", storeName);
+  // 좌표 기반 파싱 시도 (annotations가 있는 경우)
+  const annotations = ocrResult.annotations;
+  if (annotations && annotations.length > 0) {
+    const result = extractSupplierAndStoreFromAnnotations(annotations);
+    supplier = result.supplier;
+    storeName = result.storeName;
   }
 
-  if (supplierSection) {
-    // 공급자 상호 (공급업체)
-    supplier = supplierSection[1].trim()
-      .replace(/\(인\)/g, "") // (인) 제거
-      .replace(/등록번호[\s\S]*/g, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-    console.log("공급자 상호 (공급업체):", supplier);
-  }
-
-  // 위 패턴으로 못 찾은 경우 대체 패턴
+  // 좌표 기반으로 못 찾은 경우 텍스트 기반 파싱
   if (!supplier && !storeName) {
-    // 모든 상호 찾기 (보통 2개: 공급받는자, 공급자)
-    const allCompanyNames = text.matchAll(/상\s*호[:\s]*([^\n등]+)/g);
-    const names = Array.from(allCompanyNames).map(m => m[1].trim().replace(/\s{2,}/g, " "));
-    if (names.length >= 2) {
-      storeName = names[0]; // 첫 번째: 공급받는자 (지점)
-      supplier = names[1].replace(/\(인\)/g, "").trim(); // 두 번째: 공급자 (공급업체)
-    } else if (names.length === 1) {
-      supplier = names[0];
+    // 전체 텍스트에서 공급받는자/공급자 섹션 찾기
+    const receiverSection = text.match(/공\s*급\s*받\s*는\s*자[\s\S]*?상\s*호[:\s]*([^\n공]+)/);
+    const supplierSection = text.match(/공\s*급\s*자[\s\S]*?상\s*호[:\s]*([^\n]+)/);
+
+    if (receiverSection) {
+      storeName = receiverSection[1].trim()
+        .replace(/등록번호[\s\S]*/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    }
+
+    if (supplierSection) {
+      supplier = supplierSection[1].trim()
+        .replace(/\(인\)/g, "")
+        .replace(/등록번호[\s\S]*/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    }
+
+    // 위 패턴으로 못 찾은 경우 대체 패턴
+    if (!supplier && !storeName) {
+      const allCompanyNames = text.matchAll(/상\s*호[:\s]*([^\n등]+)/g);
+      const names = Array.from(allCompanyNames).map(m => m[1].trim().replace(/\s{2,}/g, " "));
+      if (names.length >= 2) {
+        storeName = names[0];
+        supplier = names[1].replace(/\(인\)/g, "").trim();
+      } else if (names.length === 1) {
+        supplier = names[0];
+      }
     }
   }
+
+  console.log("공급자 상호 (공급업체):", supplier);
+  console.log("공급받는자 상호 (지점):", storeName);
 
   // 등록번호 추출
   let documentNumber: string | undefined;
@@ -227,7 +235,7 @@ export function parseInvoiceText(ocrResult: OcrResult | null): ParsedInvoice {
   }
 
   // 품명과 수량 추출 (좌표 정보가 있으면 좌표 기반 매칭 사용)
-  const annotations = ocrResult.annotations;
+  // annotations는 이미 위에서 선언됨
   const items = annotations && annotations.length > 0
     ? extractItemsWithCoordinates(annotations)
     : extractItemsFromLines(lines);
@@ -246,6 +254,189 @@ export function parseInvoiceText(ocrResult: OcrResult | null): ParsedInvoice {
   console.log(JSON.stringify(result, null, 2));
 
   return result;
+}
+
+/**
+ * 좌표 기반으로 공급자(공급업체)와 공급받는자(지점) 상호 추출
+ * 거래명세서 레이아웃:
+ * - 왼쪽: 공급받는자 라벨 (공급받는자, 등록번호, 상호)
+ * - 가운데: 공급받는자 값 (등록번호, 상호명, 주소)
+ * - 오른쪽: 공급자 라벨 (공급자, 등록번호, 상호)
+ * - 맨 오른쪽: 공급자 값 (등록번호, 상호명, 주소)
+ */
+function extractSupplierAndStoreFromAnnotations(
+  annotations: TextAnnotation[]
+): { supplier?: string; storeName?: string } {
+  // 1. "공급받는자"와 "공급자" 위치 찾기
+  let receiverLabelX = 0;
+  let receiverLabelY = 0;
+  let supplierLabelX = 0;
+  let supplierLabelY = 0;
+
+  for (const ann of annotations) {
+    // "공급" + "받는" + "자" 또는 "공급받는자" 형태
+    if (ann.text === "공급" || ann.text === "공급받는자") {
+      // 첫 번째로 발견된 "공급"이 공급받는자일 가능성 높음 (왼쪽에 있음)
+      if (receiverLabelX === 0 || ann.bounds.x < receiverLabelX) {
+        receiverLabelX = ann.bounds.x;
+        receiverLabelY = ann.bounds.y;
+      }
+    }
+    if (ann.text === "공급자") {
+      supplierLabelX = ann.bounds.x;
+      supplierLabelY = ann.bounds.y;
+    }
+  }
+
+  // "공급자" 라벨을 명시적으로 찾지 못했을 경우, 오른쪽에 있는 "공급"을 공급자로 처리
+  if (supplierLabelX === 0) {
+    for (const ann of annotations) {
+      if (ann.text === "공급" && ann.bounds.x > receiverLabelX + 500) {
+        supplierLabelX = ann.bounds.x;
+        supplierLabelY = ann.bounds.y;
+        break;
+      }
+    }
+  }
+
+  console.log(`공급받는자 라벨 위치: x=${receiverLabelX}, y=${receiverLabelY}`);
+  console.log(`공급자 라벨 위치: x=${supplierLabelX}, y=${supplierLabelY}`);
+
+  // 2. "상호" 라벨들의 위치 찾기
+  const companyLabels: { x: number; y: number }[] = [];
+  for (const ann of annotations) {
+    if (ann.text === "상호") {
+      companyLabels.push({ x: ann.bounds.x, y: ann.bounds.y });
+    }
+  }
+
+  // X 좌표로 정렬 (왼쪽 → 오른쪽)
+  companyLabels.sort((a, b) => a.x - b.x);
+  console.log("상호 라벨들:", companyLabels);
+
+  // 3. 상호명 후보 추출 (회사명 패턴)
+  // 회사명 패턴: 영문 대문자로 시작, "유한회사", "주식회사", 또는 한글+영문 조합
+  const companyNameCandidates: { text: string; x: number; y: number }[] = [];
+
+  for (const ann of annotations) {
+    const text = ann.text.trim();
+
+    // 제외 키워드
+    const excluded = [
+      "공급", "받는", "자", "등록", "번호", "상호", "사업장", "주소",
+      "거래", "명세서", "품명", "납품", "수량", "비고", "특이사항",
+      "담당자", "검수", "입회", "수거", "년", "월", "일", "층",
+      "서울", "부산", "인천", "대구", "광주", "대전", "울산", "경기",
+      "특별시", "광역시", "도", "시", "구", "군", "동", "읍", "면", "리", "로", "길"
+    ];
+
+    if (excluded.some(ex => text.includes(ex))) continue;
+    if (/^\d/.test(text)) continue; // 숫자로 시작하면 제외
+    if (text.length < 2) continue;
+    if (/^[\(\)]$/.test(text)) continue; // 단일 괄호 제외
+
+    // 회사명 패턴 체크
+    const isCompanyName =
+      /^[A-Z]/.test(text) || // 영문 대문자로 시작
+      /유한회사|주식회사|합자회사/.test(text) || // 법인 형태
+      (/[가-힣]/.test(text) && text.length >= 2 && !excluded.some(ex => text === ex)); // 한글 2글자 이상
+
+    if (isCompanyName) {
+      companyNameCandidates.push({
+        text,
+        x: ann.bounds.x,
+        y: ann.bounds.y,
+      });
+    }
+  }
+
+  console.log("회사명 후보들:", companyNameCandidates.map(c => `${c.text} (x=${c.x})`));
+
+  // 4. 공급받는자/공급자별로 상호명 매칭
+  let storeName: string | undefined;
+  let supplier: string | undefined;
+
+  // 왼쪽 상호 라벨 근처의 회사명 → 공급받는자 (지점)
+  if (companyLabels.length >= 1) {
+    const leftLabel = companyLabels[0];
+    // 상호 라벨의 Y 좌표와 비슷하고, X 좌표가 오른쪽에 있는 회사명
+    const storeNameCandidate = companyNameCandidates
+      .filter(c =>
+        Math.abs(c.y - leftLabel.y) < 150 && // Y 좌표 비슷
+        c.x > leftLabel.x && // 라벨보다 오른쪽
+        c.x < (supplierLabelX || 9999) - 200 // 공급자 영역보다 왼쪽
+      )
+      .sort((a, b) => a.x - b.x); // X 좌표로 정렬
+
+    if (storeNameCandidate.length > 0) {
+      // 연속된 텍스트들을 조합 (예: "URBANSTAY" + "(" + "어반스테이" + "송도" + ")")
+      const combined = combineNearbyTexts(storeNameCandidate, annotations);
+      storeName = combined;
+    }
+  }
+
+  // 오른쪽 상호 라벨 근처의 회사명 → 공급자 (공급업체)
+  if (companyLabels.length >= 2) {
+    const rightLabel = companyLabels[1];
+    // 상호 라벨의 Y 좌표와 비슷하고, X 좌표가 오른쪽에 있는 회사명
+    const supplierNameCandidate = companyNameCandidates
+      .filter(c =>
+        Math.abs(c.y - rightLabel.y) < 150 && // Y 좌표 비슷
+        c.x > rightLabel.x // 라벨보다 오른쪽
+      )
+      .sort((a, b) => a.x - b.x);
+
+    if (supplierNameCandidate.length > 0) {
+      const combined = combineNearbyTexts(supplierNameCandidate, annotations);
+      supplier = combined.replace(/\(인\)/g, "").trim();
+    }
+  }
+
+  return { supplier, storeName };
+}
+
+/**
+ * 근처에 있는 텍스트들을 조합
+ */
+function combineNearbyTexts(
+  candidates: { text: string; x: number; y: number }[],
+  annotations: TextAnnotation[]
+): string {
+  if (candidates.length === 0) return "";
+
+  // 첫 번째 후보의 Y 좌표를 기준으로
+  const baseY = candidates[0].y;
+  const baseX = candidates[0].x;
+
+  // 같은 줄에 있는 모든 텍스트 찾기 (Y 좌표 기준 ±100px)
+  const sameLineTexts = annotations
+    .filter(ann =>
+      Math.abs(ann.bounds.y - baseY) < 100 &&
+      ann.bounds.x >= baseX - 50 &&
+      ann.bounds.x < baseX + 800
+    )
+    .sort((a, b) => a.bounds.x - b.bounds.x);
+
+  // 텍스트 조합
+  let result = "";
+  for (const ann of sameLineTexts) {
+    const text = ann.text.trim();
+    // 제외 키워드
+    if (["상호", "등록", "번호", "사업장", "주소", "(인)"].includes(text)) continue;
+    if (/^\d{3}-\d{2}-\d{5}$/.test(text)) continue; // 사업자등록번호 제외
+    if (/^\d+$/.test(text) && text.length > 5) continue; // 긴 숫자 제외
+
+    // 괄호 처리
+    if (text === "(") {
+      result += "(";
+    } else if (text === ")") {
+      result = result.trimEnd() + ")";
+    } else {
+      result += (result && !result.endsWith("(") ? " " : "") + text;
+    }
+  }
+
+  return result.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -912,4 +1103,52 @@ export async function getOcrScans(filters: OcrScanFilters = {}): Promise<OcrScan
     imageUrl: row.image_url || null,
     createdAt: row.created_at,
   }));
+}
+
+/**
+ * 중복 스캔 체크 (날짜 + 공급업체 + 지점 조합)
+ * @returns 중복인 경우 기존 레코드, 없으면 null
+ */
+export async function checkDuplicateScan(
+  documentDate: string,
+  supplierId: string,
+  storeId: string
+): Promise<OcrScanRecord | null> {
+  if (!documentDate || !supplierId || !storeId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("ocr_scans")
+    .select(`
+      *,
+      suppliers:supplier_id (name),
+      stores:store_id (name)
+    `)
+    .eq("document_date", documentDate)
+    .eq("supplier_id", supplierId)
+    .eq("store_id", storeId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    provider: data.provider,
+    confidence: data.confidence,
+    rawText: data.raw_text,
+    documentDate: data.document_date,
+    supplier: data.supplier,
+    documentNumber: data.document_number,
+    items: data.items || [],
+    supplierId: data.supplier_id,
+    storeId: data.store_id,
+    supplierName: data.suppliers?.name || null,
+    storeName: data.stores?.name || null,
+    imageUrl: data.image_url || null,
+    createdAt: data.created_at,
+  };
 }

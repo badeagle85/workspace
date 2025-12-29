@@ -179,11 +179,12 @@ export default function HistoryPage() {
           ) : (
             <div className="border rounded-lg overflow-hidden">
               {/* Table Header */}
-              <div className="grid grid-cols-[100px_1fr_1fr_80px_40px] gap-2 px-4 py-3 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
+              <div className="grid grid-cols-[100px_1fr_1fr_80px_100px_40px] gap-2 px-4 py-3 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
                 <div>거래일자</div>
                 <div>공급업체</div>
                 <div>지점</div>
                 <div className="text-center">품목수</div>
+                <div>등록일</div>
                 <div></div>
               </div>
               {/* Table Body */}
@@ -192,7 +193,7 @@ export default function HistoryPage() {
                   {/* Summary Row */}
                   <button
                     onClick={() => setExpandedId(expandedId === scan.id ? null : scan.id)}
-                    className="w-full text-left grid grid-cols-[100px_1fr_1fr_80px_40px] gap-2 px-4 py-3 hover:bg-muted/30 transition-colors items-center"
+                    className="w-full text-left grid grid-cols-[100px_1fr_1fr_80px_100px_40px] gap-2 px-4 py-3 hover:bg-muted/30 transition-colors items-center"
                   >
                     <div className="text-sm">
                       {scan.documentDate ? formatDate(scan.documentDate) : "-"}
@@ -207,6 +208,9 @@ export default function HistoryPage() {
                       <span className="inline-flex items-center justify-center bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-medium">
                         {scan.items.length}
                       </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDate(scan.createdAt)}
                     </div>
                     <div className="flex justify-center">
                       {expandedId === scan.id ? (
